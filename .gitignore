@@ -7,3 +7,11 @@ desktop.ini
 *.tfstate
 *.tfstate.backup
 .env
+
+# Per-instructor / per-student state backend config (created from backend.tf.example)
+lab_environment/lab_env_student/backend.tf
+lab_environment/lab_env_student/terraform.tfvars
+lab_environment/lab_env_student/.terraform/
+lab_environment/lab_env_student/.terraform.lock.hcl
+lab_environment/lab_env_student/tfplan
+lab_environment/lab_env_student/outputs.json

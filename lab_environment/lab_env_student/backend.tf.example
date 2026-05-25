@@ -1,0 +1,22 @@
+# Copy this to `backend.tf` and edit the four values:
+#
+#   cp backend.tf.example backend.tf
+#   nano backend.tf
+#
+# Replace REGION (the bucket lives in this region), STUDENT_ID (a short
+# identifier that scopes your slice of the state bucket), and ACCOUNT or
+# COURSE_ID as needed. Default values below match the canonical IO-107 setup
+# in us-east-1.
+#
+# Terraform 1.10+ supports native S3 locking via `use_lockfile = true` -- no
+# DynamoDB lock table needed.
+
+terraform {
+  backend "s3" {
+    bucket       = "io107-tfstate-us-east-1"
+    key          = "lab_env_student/REPLACE-WITH-YOUR-STUDENT-ID.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true
+  }
+}
