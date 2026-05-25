@@ -17,15 +17,14 @@ Terraform state must live somewhere durable + locked. **Terraform 1.10+ supports
 
 ```bash
 # Replace REGION as needed
-aws s3api create-bucket \
-  --bucket io107-tfstate-REGION \
-  --region REGION \
-  --create-bucket-configuration LocationConstraint=REGION
+aws s3 mb s3://io107-tfstate-REGION --region REGION
 
 aws s3api put-bucket-versioning \
   --bucket io107-tfstate-REGION \
   --versioning-configuration Status=Enabled
 ```
+
+> `aws s3 mb` is the higher-level make-bucket helper — it handles the `LocationConstraint` quirk for non-us-east-1 regions internally, so you don't have to. The `put-bucket-versioning` step still uses `s3api` because the higher-level `aws s3` subcommand doesn't expose versioning configuration.
 
 Then add a backend block to `training_env/main.tf` (and `student_bootstrap/main.tf` if you're in split mode). **The generator intentionally does not write the backend block** — it varies per account.
 
