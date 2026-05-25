@@ -1,0 +1,38 @@
+version: 0.2
+
+env:
+  variables:
+    CLUSTER_NAME: "training-eks-cluster"
+    NAMESPACE: "lab1"
+    APP_NAME: "myapp"
+
+phases:
+  install:
+    commands:
+      # Helm install (training shortcut — production pipelines should use a pre-baked image with Helm pinned).
+      - curl -sSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      - aws eks update-kubeconfig --name $CLUSTER_NAME --region us-east-1
+
+  pre_build:
+    commands:
+      - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR_REGISTRY
+      - COMMIT_SHA=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG="${COMMIT_SHA}"
+
+  build:
+    commands:
+      - docker build -t $ECR_REGISTRY/$APP_NAME:$IMAGE_TAG .
+      - docker push $ECR_REGISTRY/$APP_NAME:$IMAGE_TAG
+
+  post_build:
+    commands:
+      - |
+        helm upgrade --install $APP_NAME charts/myapp \
+          --namespace $NAMESPACE \
+          --create-namespace \
+          --values charts/myapp/values-$ENVIRONMENT.yaml \
+          --set image.tag=$IMAGE_TAG \
+          --atomic \
+          --timeout 10m
+      - kubectl rollout status deployment/$APP_NAME -n $NAMESPACE --timeout=5m
+      - kubectl get pods -n $NAMESPACE -l app=$APP_NAME

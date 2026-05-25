@@ -1,0 +1,53 @@
+version: 0.2
+
+# AWS CodeBuild buildspec for the io107-lab2-sam-app pipeline.
+# Triggered by AWS CodePipeline on merges to `main`.
+#
+# Environment variables expected (set on the CodeBuild project, not in this file):
+#   ARTIFACT_BUCKET   - S3 bucket used by `sam package` (from Lab 1)
+#   STACK_NAME        - CloudFormation stack name (default: io107-lab2-sam-app)
+#   ENVIRONMENT       - dev | stg | prd (passed to the SAM Environment parameter)
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - pip install --upgrade pip
+      - pip install aws-sam-cli
+      - pip install pytest
+      - pip install -r src/requirements.txt || true
+
+  pre_build:
+    commands:
+      - echo "Running unit tests..."
+      - PYTHONPATH=src pytest tests/ -v
+
+  build:
+    commands:
+      - echo "Building SAM application..."
+      - sam build
+      - sam package
+          --output-template-file packaged.yaml
+          --s3-bucket $ARTIFACT_BUCKET
+
+  post_build:
+    commands:
+      - echo "Deploying SAM application..."
+      - sam deploy
+          --template-file packaged.yaml
+          --stack-name $STACK_NAME
+          --capabilities CAPABILITY_IAM
+          --parameter-overrides Environment=$ENVIRONMENT
+          --no-confirm-changeset
+          --no-fail-on-empty-changeset
+
+artifacts:
+  files:
+    - packaged.yaml
+    - template.yaml
+  discard-paths: no
+
+cache:
+  paths:
+    - '/root/.cache/pip/**/*'

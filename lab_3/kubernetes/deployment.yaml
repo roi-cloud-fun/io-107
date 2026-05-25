@@ -1,0 +1,35 @@
+---
+# DELIBERATELY BROKEN — Lab 3 students remediate this file.
+#
+# Policy: policies/eks.rego
+#
+# VIOLATION 6: Deployment metadata is missing required labels
+#              `environment` and `owner`.
+# VIOLATION 7: Container `myapp` pulls from an unapproved registry
+#              (`docker.io`). Only images from the approved Amazon ECR
+#              registry pattern are permitted:
+#                123456789012.dkr.ecr.us-east-1.amazonaws.com/<repo>:<tag>
+# VIOLATION 8: Container `myapp` is missing `resources.limits` — both
+#              `memory` and `cpu` limits are required.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+  namespace: default
+  labels:
+    app: myapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      containers:
+        - name: myapp
+          image: docker.io/library/nginx:latest
+          ports:
+            - containerPort: 80

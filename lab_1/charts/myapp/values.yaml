@@ -1,0 +1,52 @@
+replicaCount: 2
+
+image:
+  repository: 123456789012.dkr.ecr.us-east-1.amazonaws.com/myapp
+  # Policy: image tag MUST be set by the pipeline (--set image.tag=$IMAGE_TAG).
+  # Default left empty so a missing override fails fast at `helm template` time
+  # rather than silently deploying a mutable "latest" tag.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 8080
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+serviceAccount:
+  create: true
+  name: myapp-sa
+  annotations:
+    eks.amazonaws.com/role-arn: ""
+
+# Container listens on 8080 (see Dockerfile CMD). Service targets 8080.
+containerPort: 8080
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 2
+  failureThreshold: 3
+
+# Overridden per-env (values-dev.yaml, values-stg.yaml).
+environment: base

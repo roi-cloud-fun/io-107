@@ -1,0 +1,141 @@
+###############################################################################
+# IO-107 Lab 4 — buildspec.yml
+#
+# AWS CodeBuild phases for the Aurora Blue/Green deployment pipeline.
+#
+# Pipeline shape:
+#   Source -> Build (plan) -> Validate (OPA) -> Approval (manual) -> Deploy (apply)
+#
+# This buildspec runs in TWO CodeBuild projects in the pipeline:
+#   - Plan/Validate build (TF_PHASE=plan)  -> install, init, plan, conftest test
+#   - Apply build         (TF_PHASE=apply) -> CLI-driven Blue/Green if the target
+#                                              engine version differs from the
+#                                              live cluster, then terraform apply
+#                                              for everything else
+#
+# Why CLI-driven Blue/Green?
+#   The Terraform AWS provider does not support `blue_green_update` on
+#   `aws_rds_cluster` (Aurora). To preserve the Blue/Green upgrade path on
+#   Aurora, the cluster's `engine_version` carries `lifecycle.ignore_changes`
+#   in Terraform, and this buildspec drives the AWS RDS API directly via
+#   `aws rds create-blue-green-deployment` + `switchover-blue-green-deployment`.
+#   The `terraform_data.engine_version_target` resource surfaces the target
+#   version to OPA so the policy gate still fires before approval.
+###############################################################################
+
+version: 0.2
+
+env:
+  variables:
+    TF_VERSION: "1.7.5"
+    CONFTEST_VERSION: "0.50.0"
+    TF_IN_AUTOMATION: "true"
+    # Set by the CodePipeline action — "plan" for the validate stage, "apply" for deploy.
+    TF_PHASE: "plan"
+    CLUSTER_ID: "training-aurora"
+    AWS_REGION: "us-east-1"
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - echo "Installing Terraform ${TF_VERSION} and Conftest ${CONFTEST_VERSION}"
+      - curl -sSL -o /tmp/terraform.zip "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip"
+      - unzip -q /tmp/terraform.zip -d /usr/local/bin/
+      - terraform version
+      - curl -sSL -o /tmp/conftest.tar.gz "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+      - tar -xzf /tmp/conftest.tar.gz -C /usr/local/bin/ conftest
+      - conftest --version
+
+  pre_build:
+    commands:
+      - echo "Phase = ${TF_PHASE}"
+      - cd terraform
+      - terraform init -input=false -no-color
+      - |
+        if [ "${TF_PHASE}" = "plan" ]; then
+          echo "Running terraform plan"
+          terraform plan -input=false -no-color -out=tfplan
+          terraform show -json tfplan > tfplan.json
+        fi
+
+  build:
+    commands:
+      - |
+        if [ "${TF_PHASE}" = "plan" ]; then
+          echo "Validating plan with Conftest / OPA"
+          cd ..
+          conftest test terraform/tfplan.json -p policies/ --no-color
+        fi
+
+  post_build:
+    commands:
+      - |
+        if [ "${TF_PHASE}" = "apply" ]; then
+          echo "===== Apply phase ====="
+
+          # Discover the target version from the plan (set by the student's edit
+          # to local.target_engine_version, surfaced via the terraform_data shim).
+          TARGET_VERSION=$(jq -r '.resource_changes[] | select(.type=="terraform_data" and .name=="engine_version_target") | .change.after.input' tfplan.json)
+          CURRENT_VERSION=$(aws rds describe-db-clusters \
+            --db-cluster-identifier "${CLUSTER_ID}" \
+            --region "${AWS_REGION}" \
+            --query 'DBClusters[0].EngineVersion' --output text)
+
+          echo "current engine_version: ${CURRENT_VERSION}"
+          echo "target  engine_version: ${TARGET_VERSION}"
+
+          if [ "${TARGET_VERSION}" != "${CURRENT_VERSION}" ]; then
+            echo "Engine version change detected. Initiating Blue/Green deployment via AWS RDS API."
+
+            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            CLUSTER_ARN="arn:aws:rds:${AWS_REGION}:${ACCOUNT_ID}:cluster:${CLUSTER_ID}"
+            BG_NAME="${CLUSTER_ID}-bg-$(date +%s)"
+
+            BG_ID=$(aws rds create-blue-green-deployment \
+              --blue-green-deployment-name "${BG_NAME}" \
+              --source "${CLUSTER_ARN}" \
+              --target-engine-version "${TARGET_VERSION}" \
+              --region "${AWS_REGION}" \
+              --query 'BlueGreenDeployment.BlueGreenDeploymentIdentifier' --output text)
+
+            echo "Created Blue/Green deployment: ${BG_ID}"
+            echo "Waiting for green cluster to be available (typically 5–15 min)..."
+            aws rds wait blue-green-deployment-available \
+              --blue-green-deployment-identifier "${BG_ID}" \
+              --region "${AWS_REGION}"
+
+            echo "Green cluster ready. Initiating switchover..."
+            aws rds switchover-blue-green-deployment \
+              --blue-green-deployment-identifier "${BG_ID}" \
+              --region "${AWS_REGION}"
+
+            echo "Waiting for switchover to complete..."
+            aws rds wait blue-green-deployment-switchover-completed \
+              --blue-green-deployment-identifier "${BG_ID}" \
+              --region "${AWS_REGION}"
+
+            echo "Switchover complete. Promoted engine_version=${TARGET_VERSION} on cluster=${CLUSTER_ID}."
+          else
+            echo "No engine_version change. Skipping Blue/Green path."
+          fi
+
+          # Apply the rest of the plan (tags, parameter group, etc.). The
+          # cluster's engine_version is gated by lifecycle.ignore_changes so
+          # this apply will NOT re-modify it — the Blue/Green flow already did.
+          cd terraform
+          terraform apply -input=false -no-color tfplan
+
+          # Refresh-only sync so Terraform state reflects the post-switchover
+          # cluster (the engine_version attribute, while ignored on apply,
+          # still ought to round-trip cleanly in state for future plans).
+          terraform apply -refresh-only -auto-approve -input=false -no-color
+        fi
+
+artifacts:
+  base-directory: terraform
+  files:
+    - tfplan
+    - tfplan.json
+  discard-paths: no

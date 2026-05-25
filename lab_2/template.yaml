@@ -1,0 +1,90 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: IO-107 Lab 2 - Serverless API
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - stg
+      - prd
+    Description: Deployment environment name (passed into Lambda as ENVIRONMENT env var).
+  LogLevel:
+    Type: String
+    Default: INFO
+    AllowedValues:
+      - DEBUG
+      - INFO
+      - WARNING
+      - ERROR
+    Description: Python logging level for the Lambda handler.
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: python3.11
+    MemorySize: 256
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        LOG_LEVEL: !Ref LogLevel
+
+Resources:
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.handler
+      CodeUri: src/
+      AutoPublishAlias: live
+      DeploymentPreference:
+        Type: Canary10Percent5Minutes
+        Alarms:
+          - !Ref ApiErrorAlarm
+      Events:
+        GetItems:
+          Type: Api
+          Properties:
+            Path: /items
+            Method: GET
+        HealthCheck:
+          Type: Api
+          Properties:
+            Path: /health
+            Method: GET
+        # Students add CreateItem here in Task 4:
+        # CreateItem:
+        #   Type: Api
+        #   Properties:
+        #     Path: /items
+        #     Method: POST
+
+  ApiErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Lambda function error rate alarm used by SAM deployment preference for automatic rollback.
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ApiFunction
+        - Name: Resource
+          Value: !Sub "${ApiFunction}:live"
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL for the deployed stage (no trailing slash).
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
+  ApiFunctionName:
+    Description: Lambda function name (used by Task 6 to locate the function in the console).
+    Value: !Ref ApiFunction
+  ApiFunctionAliasArn:
+    Description: ARN of the live alias that callers should invoke.
+    Value: !Ref ApiFunction.Alias

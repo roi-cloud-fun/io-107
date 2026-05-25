@@ -1,0 +1,10 @@
+# Conftest configuration for IO-107 Lab 3.
+#
+# All Rego files under ./policies share `package main`, so Conftest evaluates
+# the union of their `deny` rules against any input. Terraform plan JSON
+# (tfplan.json) feeds the naming / tagging / encryption / lambda rules; the
+# Kubernetes manifests under ./kubernetes feed the eks rules.
+policy = "./policies"
+namespace = "main"
+output = "stdout"
+trace = false

@@ -1,0 +1,23 @@
+Running policy validation...
+
+FAIL - tfplan.json - main - S3 bucket 'my-bucket' does not match naming pattern 'client-{env}-{app}-{purpose}'
+FAIL - tfplan.json - main - S3 bucket 'data_bucket' must have server-side encryption enabled
+FAIL - tfplan.json - main - S3 bucket 'data_bucket' missing required tag: Environment
+FAIL - tfplan.json - main - S3 bucket 'data_bucket' missing required tag: Application
+FAIL - tfplan.json - main - S3 bucket 'data_bucket' missing required tag: Owner
+FAIL - tfplan.json - main - S3 bucket 'data_bucket' missing required tag: CostCenter
+FAIL - tfplan.json - main - S3 bucket 'data_bucket' missing required tag: DataClass
+FAIL - tfplan.json - main - Lambda 'data-processor' timeout 600 exceeds maximum of 300 seconds
+FAIL - tfplan.json - main - Lambda 'data-processor' missing required tag: Environment
+FAIL - tfplan.json - main - Lambda 'data-processor' missing required tag: Application
+FAIL - tfplan.json - main - Lambda 'data-processor' missing required tag: Owner
+FAIL - tfplan.json - main - Lambda 'data-processor' missing required tag: CostCenter
+FAIL - kubernetes/deployment.yaml - main - Deployment 'myapp' missing required label: environment
+FAIL - kubernetes/deployment.yaml - main - Deployment 'myapp' missing required label: owner
+FAIL - kubernetes/deployment.yaml - main - Container 'myapp' uses image from unapproved registry 'docker.io'
+FAIL - kubernetes/deployment.yaml - main - Container 'myapp' must have memory limit defined
+FAIL - kubernetes/deployment.yaml - main - Container 'myapp' must have CPU limit defined
+
+17 tests, 0 passed, 0 warnings, 17 failures
+
+Policy validation failed. Fix violations before deployment.

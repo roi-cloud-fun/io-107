@@ -1,0 +1,94 @@
+IO-107 Lab 4 — Expected AWS CloudTrail events
+=============================================
+
+After `terraform apply` runs against the Blue/Green-opted cluster, AWS RDS
+emits these management events to AWS CloudTrail. All three are sourced from
+`rds.amazonaws.com` and the calling identity matches the AWS CodeBuild
+execution role used by the pipeline.
+
+Filter in the CloudTrail console:
+  - Lookup attributes:  Event source = rds.amazonaws.com
+  - Time window:        Last 30 minutes from your apply
+
+The three events appear in roughly this order:
+
+-----------------------------------------------------------------------------
+1) CreateBlueGreenDeployment
+-----------------------------------------------------------------------------
+  eventSource:     rds.amazonaws.com
+  eventName:       CreateBlueGreenDeployment
+  eventCategory:   Management
+  readOnly:        false
+  userIdentity:    AssumedRole - codebuild-io107-lab4-apply-role
+  requestParameters:
+    blueGreenDeploymentName: "training-aurora-bg-<timestamp>"
+    source:                  "arn:aws:rds:us-east-1:<account>:cluster:training-aurora"
+    targetEngineVersion:     "16.13"
+  responseElements:
+    blueGreenDeployment:
+      blueGreenDeploymentIdentifier: "bgd-<random>"
+      status:                        "PROVISIONING"
+
+  What this proves: Terraform's apply did NOT mutate the blue cluster directly.
+  It opened a Blue/Green deployment record, which is the auditable handle
+  Aurora uses to coordinate green provisioning + replication + switchover.
+
+-----------------------------------------------------------------------------
+2) ModifyDBCluster
+-----------------------------------------------------------------------------
+  eventSource:     rds.amazonaws.com
+  eventName:       ModifyDBCluster
+  eventCategory:   Management
+  readOnly:        false
+  userIdentity:    AssumedRole - codebuild-io107-lab4-apply-role
+  requestParameters:
+    dBClusterIdentifier: "training-aurora"
+    engineVersion:       "16.13"
+    applyImmediately:    true
+  responseElements:
+    dBCluster:
+      dBClusterIdentifier: "training-aurora"
+      status:              "available"   # blue cluster, still serving traffic
+
+  What this proves: The intended engine-version change is recorded against
+  the blue cluster as the target state. The cluster itself is still
+  available — this event is the INTENT, not the cut-over.
+
+-----------------------------------------------------------------------------
+3) SwitchoverBlueGreenDeployment
+-----------------------------------------------------------------------------
+  eventSource:     rds.amazonaws.com
+  eventName:       SwitchoverBlueGreenDeployment
+  eventCategory:   Management
+  readOnly:        false
+  userIdentity:    AssumedRole - codebuild-io107-lab4-apply-role
+  requestParameters:
+    blueGreenDeploymentIdentifier: "bgd-<random>"
+    switchoverTimeout:             300
+  responseElements:
+    blueGreenDeployment:
+      status: "SWITCHOVER_IN_PROGRESS"
+      source: "arn:aws:rds:us-east-1:<account>:cluster:training-aurora"
+      target: "arn:aws:rds:us-east-1:<account>:cluster:training-aurora-green-<suffix>"
+
+  What this proves: This is the AUDITABLE record of the cluster endpoint
+  actually moving from the 16.11 cluster to the 16.13 cluster. Compliance
+  evidence for the engine upgrade is this event — not the two above. The
+  other two prove the deployment was OPENED and the change was DECLARED;
+  only SwitchoverBlueGreenDeployment proves the application traffic moved.
+
+-----------------------------------------------------------------------------
+Notes
+-----------------------------------------------------------------------------
+- CloudTrail Event history can lag the API call by up to ~15 minutes. If
+  SwitchoverBlueGreenDeployment is missing immediately after apply, widen
+  the search window and refresh.
+
+- If the apply errors out before switchover, only events 1 and 2 will
+  appear; event 3 will not exist. This is the failure-mode evidence the
+  Lab 4 Troubleshooting section walks through.
+
+References:
+  https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/logging-using-cloudtrail.html
+  https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/blue-green-deployments.html
+  https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_ModifyDBCluster.html

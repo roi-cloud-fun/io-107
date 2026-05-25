@@ -1,0 +1,22 @@
+###############################################################################
+# IO-107 Lab 4 — terraform.tfvars.example
+#
+# Copy this file to `terraform.tfvars` and replace each <placeholder> with the
+# value your instructor posts on the lab whiteboard. terraform.tfvars itself
+# is in .gitignore — never commit real account-specific values.
+###############################################################################
+
+environment = "training"
+application = "io107-lab"
+owner       = "platform-team@client.com"
+cost_center = "CC-TRAINING"
+
+# Platform-managed KMS key used to encrypt the training Aurora storage.
+# Format: arn:aws:kms:<region>:<account-id>:key/<key-uuid>
+kms_key_arn = "arn:aws:kms:us-east-1:<account-id>:key/<kms-key-uuid>"
+
+# DB subnet group name created by the platform team.
+db_subnet_group_name = "training-aurora-subnets"
+
+# VPC security group attached to the cluster.
+vpc_security_group_id = "sg-<security-group-id>"

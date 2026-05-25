@@ -1,0 +1,15 @@
+apiVersion: v2
+name: myapp
+description: IO-107 Lab 1 sample Flask app — deployed to Amazon EKS via AWS CodePipeline.
+type: application
+
+# Chart version — bump when the chart structure changes.
+version: 0.1.0
+
+# App version — bump when the underlying application code changes.
+# Pipeline overrides image.tag with the commit SHA, so this is purely informational.
+appVersion: "1.0.0"
+
+home: https://example.invalid/io107-lab1-eks-app
+maintainers:
+  - name: Training Platform Team

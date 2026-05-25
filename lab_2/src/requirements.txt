@@ -1,0 +1,3 @@
+# Runtime dependencies for the Lambda function.
+# boto3 and botocore are provided by the Lambda Python 3.11 runtime — do not pin them here.
+# Add any additional packages your handler imports (one per line, with version pin).
