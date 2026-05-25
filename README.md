@@ -63,10 +63,11 @@ The student-facing markdown guides are NOT in this repo — they're authored in 
 If you need the lab guide markdown for reference, they live at:
 `courses/SYF/stream2_aws_intermediate/IO-107_SDLC_Pipeline/content/labs/Lab_*_Guide.md` in CourseCreationKit.
 
-## Repo lifecycle
+## Updating lab content
 
-This repo is authored + maintained from CourseCreationKit's labforge tooling. Updates flow:
-1. Edit content in `labforge_iterations/repo_additions/io107-lab*/` and templates in `labforge/templates/lab_env_student/`
-2. Regenerate via `python labforge/python/generate_setup_artifacts.py --course SYF/stream2_aws_intermediate/IO-107_SDLC_Pipeline --mode student`
-3. Push to this repo's `main` branch
-4. Per-student CodeCommit mirrors pick up new state at next `terraform apply` (or via re-seed)
+When fixture code changes (e.g. a buildspec edit, a Helm values change, a Rego rule update):
+
+1. Edit inside the relevant `lab_N/` subdirectory
+2. Push to `main`
+3. Re-run `terraform apply` in `lab_environment/lab_env_student/` — the seed step picks up the new content and re-mirrors it into each per-student CodeCommit
+4. (Optional) re-run the LTF specs against the refreshed state
