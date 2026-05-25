@@ -11,9 +11,29 @@ The work splits cleanly into two phases:
 
 ---
 
-## Phase 0 — Backend bootstrap (one-time per account)
+## Phase 0 — Bootstrap (one command, idempotent)
 
-Terraform state must live somewhere durable + locked. **Terraform 1.10+ supports native S3 locking** (`use_lockfile = true`) — no DynamoDB lock table needed. The only thing to provision is an S3 bucket:
+The easy path: run the bootstrap script. It checks prereqs, creates the S3 state bucket (with versioning + encryption + public-access-block), generates `backend.tf` and `terraform.tfvars` in `lab_environment/lab_env_student/`, and detects/creates the CodeStar GitHub connection.
+
+```bash
+./instructor/bootstrap.sh --student-id ltf-smoke
+```
+
+Or, to do the apply in the same shot:
+
+```bash
+./instructor/bootstrap.sh --student-id ltf-smoke --apply
+```
+
+Run `./instructor/bootstrap.sh --help` for the full flag list (region, profile, course-id, force-tfvars).
+
+**What the script does NOT automate** — the CodeStar GitHub OAuth handshake. On the first run, the script creates the connection resource and prints the Console URL; click through to complete OAuth, then re-run the script. Everything else is one command.
+
+---
+
+### Manual equivalent (if you prefer to type)
+
+Terraform 1.10+ supports native S3 locking (`use_lockfile = true`) — no DynamoDB lock table needed.
 
 ```bash
 # Replace REGION as needed
