@@ -1,0 +1,25 @@
+# IO-107 SDLC Pipeline — lab_env_student / terraform.tfvars.example
+#
+# Copy this to terraform.tfvars and fill in the values.
+# terraform.tfvars is gitignored.
+
+aws_region = "us-east-1"
+
+# Short identifier for whoever is running these labs. Lowercase, 1-16 chars.
+# For LTF smoke tests, use something like "ltf-smoke" or "ltf-${TIMESTAMP}".
+student_id = "REPLACE-ME"
+
+vpc_cidr = "10.20.0.0/16"
+
+# CodeStar source connection ARN. You must create this in the AWS Console
+# (CodePipeline → Settings → Connections → Create) and complete the GitHub
+# OAuth handshake BEFORE running terraform apply — Terraform cannot do the
+# OAuth flow.
+github_codestar_connection_arn = "arn:aws:codeconnections:REGION:ACCOUNT:connection/UUID"
+
+# Toggle individual labs (default: all enabled)
+# enable_lab1 = true
+# enable_lab2 = true
+# enable_lab3 = true
+# enable_lab4 = true
+
