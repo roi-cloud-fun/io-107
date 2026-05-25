@@ -70,7 +70,8 @@ variable "enable_lab4" {
 }
 
 
-variable "github_codestar_connection_arn" {
-  description = "Pre-existing CodeStar connection ARN (one-time OAuth handshake done in Console). Pass as input -- Terraform can't complete the OAuth flow."
-  type        = string
-}
+# Note: in student mode the CodePipeline Source action reads from each lab's
+# per-student CodeCommit repo (seeded once from the public monorepo at apply
+# time). No GitHub CodeStar connection is needed -- the seed clone is from a
+# public repo and the runtime source is CodeCommit. Split mode (multi-student
+# delivery) is the path that still needs a CodeStar GitHub connection.

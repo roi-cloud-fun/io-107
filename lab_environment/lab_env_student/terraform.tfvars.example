@@ -11,12 +11,6 @@ student_id = "REPLACE-ME"
 
 vpc_cidr = "10.20.0.0/16"
 
-# CodeStar source connection ARN. You must create this in the AWS Console
-# (CodePipeline → Settings → Connections → Create) and complete the GitHub
-# OAuth handshake BEFORE running terraform apply — Terraform cannot do the
-# OAuth flow.
-github_codestar_connection_arn = "arn:aws:codeconnections:REGION:ACCOUNT:connection/UUID"
-
 # Toggle individual labs (default: all enabled)
 # enable_lab1 = true
 # enable_lab2 = true
