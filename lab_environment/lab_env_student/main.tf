@@ -368,6 +368,15 @@ resource "aws_eks_access_policy_association" "apply_host_admin" {
   depends_on = [aws_eks_access_entry.apply_host]
 }
 
+# EKS access entries take ~30s to become effective in the cluster data plane
+# after the API call returns. Without this wait, the very next resource that
+# uses the kubernetes provider (kubernetes_namespace) hits "Unauthorized"
+# even though the access entry was just created. 45s is conservative.
+resource "time_sleep" "wait_for_apply_host_access" {
+  create_duration = "45s"
+  depends_on      = [aws_eks_access_policy_association.apply_host_admin]
+}
+
 resource "aws_iam_role" "eks_nodes" {
   name = "${local.name_prefix}-eks-nodes-role"
 
@@ -814,11 +823,12 @@ resource "kubernetes_namespace" "lab1" {
     }
   }
 
-  # Ordering: the apply-host access entry must exist BEFORE the kubernetes
-  # provider attempts any K8s API call, otherwise we get "Unauthorized".
+  # Ordering: the apply-host access entry must exist AND have propagated to
+  # the EKS data plane BEFORE the kubernetes provider attempts any K8s API
+  # call, otherwise we get "Unauthorized". time_sleep handles the ~30s lag.
   depends_on = [
     aws_eks_node_group.training,
-    aws_eks_access_policy_association.apply_host_admin,
+    time_sleep.wait_for_apply_host_access,
   ]
 }
 
