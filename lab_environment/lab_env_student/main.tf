@@ -508,9 +508,77 @@ resource "aws_iam_role_policy" "codebuild_service" {
         Resource = "*"
         Condition = {
           StringLike = {
-            "iam:PassedToService" = ["codebuild.amazonaws.com", "codepipeline.amazonaws.com"]
+            "iam:PassedToService" = [
+              "codebuild.amazonaws.com",
+              "codepipeline.amazonaws.com",
+              "lambda.amazonaws.com",
+              "apigateway.amazonaws.com",
+              "cloudformation.amazonaws.com",
+            ]
           }
         }
+      },
+      # Lab 2 uses `sam deploy`, which deploys a CloudFormation stack that
+      # creates Lambda functions and an API Gateway. CodeBuild executes
+      # `sam deploy --capabilities CAPABILITY_IAM`, so the build role must
+      # be able to drive CloudFormation + create/manage the Lambda + API GW
+      # resources + manage the IAM roles that CFN creates for those Lambdas.
+      # Scoped to "*" because the resource ARNs are not known at apply time
+      # (CFN generates them); this is acceptable for a per-student lab
+      # account but would NOT be acceptable in production.
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudformation:CreateStack",
+          "cloudformation:UpdateStack",
+          "cloudformation:DeleteStack",
+          "cloudformation:DescribeStacks",
+          "cloudformation:DescribeStackEvents",
+          "cloudformation:DescribeStackResource",
+          "cloudformation:DescribeStackResources",
+          "cloudformation:GetTemplate",
+          "cloudformation:GetTemplateSummary",
+          "cloudformation:ListStacks",
+          "cloudformation:ListStackResources",
+          "cloudformation:CreateChangeSet",
+          "cloudformation:DescribeChangeSet",
+          "cloudformation:ExecuteChangeSet",
+          "cloudformation:DeleteChangeSet",
+          "cloudformation:ValidateTemplate",
+          "lambda:CreateFunction",
+          "lambda:UpdateFunctionCode",
+          "lambda:UpdateFunctionConfiguration",
+          "lambda:DeleteFunction",
+          "lambda:GetFunction",
+          "lambda:GetFunctionConfiguration",
+          "lambda:ListFunctions",
+          "lambda:AddPermission",
+          "lambda:RemovePermission",
+          "lambda:TagResource",
+          "lambda:UntagResource",
+          "lambda:PublishVersion",
+          "lambda:CreateAlias",
+          "lambda:UpdateAlias",
+          "lambda:DeleteAlias",
+          "lambda:GetAlias",
+          "apigateway:GET",
+          "apigateway:POST",
+          "apigateway:PUT",
+          "apigateway:PATCH",
+          "apigateway:DELETE",
+          "iam:CreateRole",
+          "iam:DeleteRole",
+          "iam:GetRole",
+          "iam:PutRolePolicy",
+          "iam:DeleteRolePolicy",
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:ListRolePolicies",
+          "iam:ListAttachedRolePolicies",
+          "iam:TagRole",
+          "iam:UntagRole",
+        ]
+        Resource = "*"
       }
     ]
   })
@@ -718,6 +786,18 @@ resource "aws_codebuild_project" "lab1" {
     environment_variable {
       name  = "ENVIRONMENT"
       value = "dev"
+    }
+    # IRSA role ARNs injected into the Helm chart at deploy time (see
+    # buildspec.yml post_build). The chart's values-*.yaml files no longer
+    # hardcode an account ID -- the pipeline picks the right ARN based on
+    # $ENVIRONMENT.
+    environment_variable {
+      name  = "IRSA_ROLE_ARN_DEV"
+      value = try(aws_iam_role.lab1_myapp_dev_role[0].arn, "")
+    }
+    environment_variable {
+      name  = "IRSA_ROLE_ARN_STG"
+      value = try(aws_iam_role.lab1_myapp_stg_role[0].arn, "")
     }
   }
 
@@ -1058,6 +1138,23 @@ resource "aws_codebuild_project" "lab2" {
     environment_variable {
       name  = "STUDENT_ID"
       value = var.student_id
+    }
+    # Lab 2 (SAM deploy) buildspec expects ARTIFACT_BUCKET / STACK_NAME /
+    # ENVIRONMENT. ARTIFACT_BUCKET reuses the CodePipeline artifact bucket --
+    # SAM only needs a bucket to upload its packaged template + zipped fns,
+    # and that bucket is already provisioned + region-correct + accessible
+    # to this CodeBuild role.
+    environment_variable {
+      name  = "ARTIFACT_BUCKET"
+      value = aws_s3_bucket.lab2_artifacts[0].bucket
+    }
+    environment_variable {
+      name  = "STACK_NAME"
+      value = "${local.name_prefix}-lab2-sam-app"
+    }
+    environment_variable {
+      name  = "ENVIRONMENT"
+      value = "dev"
     }
   }
 
@@ -1479,6 +1576,15 @@ resource "aws_codebuild_project" "lab4" {
     }
     environment_variable {
       name  = "CLUSTER_ID"
+      value = aws_rds_cluster.lab4_aurora[0].id
+    }
+    # Terraform reads var.cluster_identifier via the TF_VAR_<name> convention.
+    # We set both because the AWS CLI in the buildspec reads CLUSTER_ID and
+    # Terraform reads TF_VAR_cluster_identifier — CodeBuild does not propagate
+    # `export` between phases, so we declare both here to keep the buildspec
+    # simple.
+    environment_variable {
+      name  = "TF_VAR_cluster_identifier"
       value = aws_rds_cluster.lab4_aurora[0].id
     }
   }

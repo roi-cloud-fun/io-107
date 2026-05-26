@@ -32,7 +32,16 @@ env:
     TF_IN_AUTOMATION: "true"
     # Set by the CodePipeline action — "plan" for the validate stage, "apply" for deploy.
     TF_PHASE: "plan"
+    # Defaults; the CodeBuild project (provisioned by lab_env_student/) overrides
+    # CLUSTER_ID with the per-student Aurora cluster identifier. Terraform reads
+    # the cluster identifier via TF_VAR_cluster_identifier (auto-mapped to
+    # var.cluster_identifier by the AWS provider's TF_VAR_* convention), and the
+    # AWS CLI in post_build reads CLUSTER_ID. We deliberately set TWO env vars
+    # holding the same value so the Terraform plan and the CLI flow both work
+    # without inter-phase shell-export gymnastics (CodeBuild commands do NOT
+    # share `export`s across phases).
     CLUSTER_ID: "training-aurora"
+    TF_VAR_cluster_identifier: "training-aurora"
     AWS_REGION: "us-east-1"
 
 phases:

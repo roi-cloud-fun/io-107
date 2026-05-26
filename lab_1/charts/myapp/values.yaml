@@ -1,7 +1,12 @@
 replicaCount: 2
 
 image:
-  repository: 123456789012.dkr.ecr.us-east-1.amazonaws.com/myapp
+  # Repository is per-student (each student has their own ECR registry).
+  # The pipeline injects this via:
+  #   --set image.repository=$ECR_REGISTRY/$APP_NAME
+  # Defaulting to "" so a missing override fails loudly at `helm template`
+  # time rather than silently pulling from someone else's account.
+  repository: ""
   # Policy: image tag MUST be set by the pipeline (--set image.tag=$IMAGE_TAG).
   # Default left empty so a missing override fails fast at `helm template` time
   # rather than silently deploying a mutable "latest" tag.

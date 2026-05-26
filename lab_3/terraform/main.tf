@@ -56,6 +56,30 @@ resource "aws_s3_bucket" "data_bucket" {
   }
 }
 
+# Lambda execution role. NOT a teaching target -- the policies in ../policies/
+# evaluate the Lambda function itself (timeout, tags), not the execution role.
+# We create a real role here so `terraform apply` succeeds once the policy
+# violations on the function are fixed.
+data "aws_iam_policy_document" "lambda_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "lambda_exec" {
+  name               = "lab3-lambda-exec"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_basic" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
 # VIOLATION 4: Lambda timeout exceeds maximum
 #   Policy:  policies/lambda.rego
 #   Maximum allowed: 300 seconds.
@@ -71,7 +95,7 @@ resource "aws_lambda_function" "processor" {
   memory_size      = 512
   filename         = data.archive_file.processor_zip.output_path
   source_code_hash = data.archive_file.processor_zip.output_base64sha256
-  role             = "arn:aws:iam::123456789012:role/lab3-lambda-role"
+  role             = aws_iam_role.lambda_exec.arn
 
   tags = {
     Name = "Processor"

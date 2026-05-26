@@ -26,12 +26,23 @@ phases:
 
   post_build:
     commands:
+      # IRSA role ARN is selected by $ENVIRONMENT. Both ARNs are passed in
+      # from CodeBuild env vars (set by lab_env_student/) so the chart values
+      # never have to hardcode an AWS account ID.
+      - |
+        case "$ENVIRONMENT" in
+          dev) IRSA_ROLE_ARN="$IRSA_ROLE_ARN_DEV" ;;
+          stg) IRSA_ROLE_ARN="$IRSA_ROLE_ARN_STG" ;;
+          *)   echo "Unknown ENVIRONMENT: $ENVIRONMENT"; exit 1 ;;
+        esac
       - |
         helm upgrade --install $APP_NAME charts/myapp \
           --namespace $NAMESPACE \
           --create-namespace \
           --values charts/myapp/values-$ENVIRONMENT.yaml \
+          --set image.repository=$ECR_REGISTRY/$APP_NAME \
           --set image.tag=$IMAGE_TAG \
+          --set "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$IRSA_ROLE_ARN" \
           --atomic \
           --timeout 10m
       - kubectl rollout status deployment/$APP_NAME -n $NAMESPACE --timeout=5m

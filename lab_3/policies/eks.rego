@@ -13,7 +13,11 @@ package main
 
 import future.keywords.in
 
-approved_registry_prefix := "123456789012.dkr.ecr.us-east-1.amazonaws.com/"
+# Match any Amazon ECR registry hostname: <account-id>.dkr.ecr.<region>.amazonaws.com
+# The policy enforces "image must come from ECR (not Docker Hub, not GHCR, not a
+# random registry)" -- it does NOT pin to a specific account, because each
+# student has their own account and the lab fixtures must work in any of them.
+approved_registry_regex := `^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/`
 
 required_deployment_labels := ["environment", "owner"]
 
@@ -35,7 +39,7 @@ deny[msg] {
 deny[msg] {
 	input.kind == "Deployment"
 	container := input.spec.template.spec.containers[_]
-	not startswith(container.image, approved_registry_prefix)
+	not regex.match(approved_registry_regex, container.image)
 
 	msg := sprintf(
 		"Container '%s' uses image from unapproved registry '%s'",
