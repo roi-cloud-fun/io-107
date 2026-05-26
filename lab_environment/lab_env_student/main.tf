@@ -10,7 +10,7 @@
 #   - EKS cluster + managed node group + IRSA OIDC provider
 #   - Shared CodeBuild service role + CodePipeline service role
 #   - Per-lab: CodePipeline + CodeBuild project + S3 artifact bucket
-#   - lab1: pipeline + buildspec wiring
+#   - lab1: K8s namespace `lab1-${var.student_id}`, IRSA roles, pipeline + buildspec wiring
 #   - lab2: pipeline + buildspec wiring
 #   - lab3: pipeline + buildspec wiring
 #   - lab4: Aurora cluster `training-aurora-${var.student_id}`, pipeline + buildspec wiring
@@ -640,7 +640,7 @@ resource "aws_codebuild_project" "lab1" {
     }
     environment_variable {
       name  = "NAMESPACE"
-      value = "-${var.student_id}"
+      value = "lab1-${var.student_id}"
     }
     environment_variable {
       name  = "APP_NAME"
@@ -755,7 +755,132 @@ resource "aws_cloudwatch_event_target" "lab1_trigger" {
 }
 
 
+resource "kubernetes_namespace" "lab1" {
+  count = var.enable_lab1 ? 1 : 0
 
+  metadata {
+    name = "lab1-${var.student_id}"
+    labels = {
+      "io107/course"  = "io107"
+      "io107/lab"     = "lab1"
+      "io107/student" = var.student_id
+    }
+  }
+
+  depends_on = [aws_eks_node_group.training]
+}
+
+
+
+resource "aws_iam_role" "lab1_myapp_dev_role" {
+  count = var.enable_lab1 ? 1 : 0
+
+  name = "${local.name_prefix}-myapp-dev-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Federated = aws_iam_openid_connect_provider.eks_irsa.arn
+      }
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:lab1-${var.student_id}:myapp-sa"
+          "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+
+  tags = merge(local.common_tags, { Lab = "lab1", IrsaRole = "myapp-dev-role" })
+}
+
+resource "aws_iam_role_policy" "lab1_myapp_dev_role" {
+  count = var.enable_lab1 ? 1 : 0
+  name  = "${local.name_prefix}-myapp-dev-role-inline"
+  role  = aws_iam_role.lab1_myapp_dev_role[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket", "s3:GetObject"]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = ["kms:Decrypt", "kms:GenerateDataKey"]
+        Resource = [
+          aws_kms_key.training_s3.arn,
+          aws_kms_key.training_logs.arn
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role" "lab1_myapp_stg_role" {
+  count = var.enable_lab1 ? 1 : 0
+
+  name = "${local.name_prefix}-myapp-stg-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Federated = aws_iam_openid_connect_provider.eks_irsa.arn
+      }
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:lab1-${var.student_id}:myapp-sa"
+          "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+
+  tags = merge(local.common_tags, { Lab = "lab1", IrsaRole = "myapp-stg-role" })
+}
+
+resource "aws_iam_role_policy" "lab1_myapp_stg_role" {
+  count = var.enable_lab1 ? 1 : 0
+  name  = "${local.name_prefix}-myapp-stg-role-inline"
+  role  = aws_iam_role.lab1_myapp_stg_role[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket", "s3:GetObject"]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = ["kms:Decrypt", "kms:GenerateDataKey"]
+        Resource = [
+          aws_kms_key.training_s3.arn,
+          aws_kms_key.training_logs.arn
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "*"
+      }
+    ]
+  })
+}
 
 
 
