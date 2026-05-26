@@ -334,10 +334,19 @@ resource "aws_eks_access_policy_association" "codebuild_admin" {
 #     ->  arn:aws:iam::<acct>:role/<RoleName>
 #   - direct IAM user/role ARN: pass through unchanged.
 locals {
-  _caller_arn                 = data.aws_caller_identity.current.arn
-  _caller_arn_is_assumed_role = startswith(local._caller_arn, "arn:aws:sts::") && contains(split(":", local._caller_arn), "assumed-role")
+  _caller_arn = data.aws_caller_identity.current.arn
+  # An STS assumed-role ARN looks like:
+  #   arn:aws:sts::<acct>:assumed-role/<RoleName>/<SessionName>
+  # The `:assumed-role/` substring is the reliable marker. Earlier versions of
+  # this logic used `contains(split(":", arn), "assumed-role")` which never
+  # matched because `split(":", ...)` keeps `assumed-role/<Role>/<Session>` as
+  # a single trailing element, not a bare "assumed-role" token.
+  _caller_arn_is_assumed_role = can(regex(":assumed-role/", local._caller_arn))
   _derived_apply_host_arn = (
     local._caller_arn_is_assumed_role
+    # split("/", "arn:aws:sts::ACCT:assumed-role/RoleName/Session")
+    #   = ["arn:aws:sts::ACCT:assumed-role", "RoleName", "Session"]
+    # so index [1] is the role name.
     ? "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${split("/", local._caller_arn)[1]}"
     : local._caller_arn
   )
