@@ -321,6 +321,53 @@ resource "aws_eks_access_policy_association" "codebuild_admin" {
   depends_on = [aws_eks_access_entry.codebuild]
 }
 
+# Also grant the host running `terraform apply` cluster admin -- otherwise the
+# kubernetes provider (used to create per-lab namespaces) fails with
+# "Error: Unauthorized". `bootstrap_cluster_creator_admin_permissions = true`
+# on the cluster only applies at creation; for an existing cluster or a
+# different apply-host, we need an explicit access entry.
+#
+# Derivation: if `apply_host_principal_arn` is set, use it verbatim. Otherwise
+# infer from the caller identity:
+#   - assumed-role ARN (e.g. EC2 instance profile, SSO session, Lambda):
+#       arn:aws:sts::<acct>:assumed-role/<RoleName>/<session>
+#     ->  arn:aws:iam::<acct>:role/<RoleName>
+#   - direct IAM user/role ARN: pass through unchanged.
+locals {
+  _caller_arn                 = data.aws_caller_identity.current.arn
+  _caller_arn_is_assumed_role = startswith(local._caller_arn, "arn:aws:sts::") && contains(split(":", local._caller_arn), "assumed-role")
+  _derived_apply_host_arn = (
+    local._caller_arn_is_assumed_role
+    ? "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${split("/", local._caller_arn)[1]}"
+    : local._caller_arn
+  )
+  apply_host_principal_arn = var.apply_host_principal_arn != "" ? var.apply_host_principal_arn : local._derived_apply_host_arn
+}
+
+resource "aws_eks_access_entry" "apply_host" {
+  cluster_name  = aws_eks_cluster.training.name
+  principal_arn = local.apply_host_principal_arn
+  type          = "STANDARD"
+
+  # Idempotent: if the principal already has an entry (e.g. created manually
+  # earlier), `terraform import` it once and this resource takes ownership.
+  lifecycle {
+    ignore_changes = [tags] # AWS may auto-apply tags on cluster-creator entries
+  }
+}
+
+resource "aws_eks_access_policy_association" "apply_host_admin" {
+  cluster_name  = aws_eks_cluster.training.name
+  principal_arn = local.apply_host_principal_arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.apply_host]
+}
+
 resource "aws_iam_role" "eks_nodes" {
   name = "${local.name_prefix}-eks-nodes-role"
 
@@ -767,7 +814,12 @@ resource "kubernetes_namespace" "lab1" {
     }
   }
 
-  depends_on = [aws_eks_node_group.training]
+  # Ordering: the apply-host access entry must exist BEFORE the kubernetes
+  # provider attempts any K8s API call, otherwise we get "Unauthorized".
+  depends_on = [
+    aws_eks_node_group.training,
+    aws_eks_access_policy_association.apply_host_admin,
+  ]
 }
 
 

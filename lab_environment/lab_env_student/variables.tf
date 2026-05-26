@@ -69,6 +69,24 @@ variable "enable_lab4" {
 }
 
 
+variable "apply_host_principal_arn" {
+  description = <<-DESC
+    IAM role/user ARN of the host running `terraform apply`. Granted EKS
+    cluster admin via aws_eks_access_entry + AmazonEKSClusterAdminPolicy so
+    Terraform's kubernetes provider can create the per-lab namespaces.
+
+    Leave empty to auto-derive from the caller identity:
+      - assumed-role ARN -> the underlying IAM role ARN
+      - direct IAM user/role ARN -> passed through unchanged
+
+    Override if the auto-derivation isn't right for your environment
+    (e.g. federated identity, role chaining, or you want to grant a
+    different principal than the one running apply).
+  DESC
+  type        = string
+  default     = ""
+}
+
 # Note: in student mode the CodePipeline Source action reads from each lab's
 # per-student CodeCommit repo (seeded once from the public monorepo at apply
 # time). No GitHub CodeStar connection is needed -- the seed clone is from a
