@@ -66,6 +66,95 @@ resource "aws_vpc" "training" {
   tags                 = merge(local.common_tags, { Name = "${local.name_prefix}-vpc" })
 }
 
+# Pre-destroy cleanup for orphaned load balancers in the VPC.
+#
+# WHY THIS EXISTS:
+#   A Kubernetes Service of `type: LoadBalancer` (Lab 1's myapp Helm chart
+#   creates one) causes the in-cluster controller -- or the AWS Load
+#   Balancer Controller, if installed -- to provision an NLB/ALB in this
+#   VPC's subnets. Terraform does NOT manage that LB; it was created by an
+#   AWS API call from inside the cluster.
+#
+#   When `terraform destroy` runs, the cluster is torn down before the
+#   controller gets a chance to clean up the LB. The orphaned LB holds:
+#     - ENIs in the public + private subnets (blocks aws_subnet destroy)
+#     - An EIP mapped to the VPC (blocks aws_internet_gateway detach/destroy)
+#   Result: 20+ minute hang on `terraform destroy`, then DependencyViolation.
+#
+# WHAT THIS DOES (destroy-only, no-op on create):
+#   1. If the cluster still exists, ask it to delete all LB-type Services
+#      via kubectl, then wait 60s for the LB controller to release them.
+#   2. Belt-and-braces: list any remaining LBs (v1 ELB + v2 ALB/NLB) in the
+#      VPC and force-delete them via AWS CLI.
+#   3. Sweep any unattached ENIs left in the VPC.
+#
+# WHY ON aws_vpc:
+#   This resource depends on `aws_vpc.training.id`, so Terraform destroys it
+#   BEFORE the VPC. The destroy provisioner runs while the VPC still exists
+#   and we can still query it. By the time Terraform tries to destroy
+#   subnets/IGW, the LBs (and their ENIs/EIPs) are already gone.
+resource "null_resource" "vpc_lb_cleanup" {
+  triggers = {
+    cluster_name = aws_eks_cluster.training.name
+    vpc_id       = aws_vpc.training.id
+    region       = var.aws_region
+  }
+
+  provisioner "local-exec" {
+    when        = destroy
+    interpreter = ["bash", "-c"]
+    command     = <<-EOT
+      set +e
+      CLUSTER="${self.triggers.cluster_name}"
+      VPC="${self.triggers.vpc_id}"
+      REGION="${self.triggers.region}"
+
+      echo "Pre-destroy: cleaning up orphaned load balancers in $VPC"
+
+      # 1) Best-effort: ask K8s to delete LB services so the in-cluster
+      #    controller releases them cleanly. Skip silently if the cluster
+      #    is already gone or kubectl is unavailable.
+      if aws eks describe-cluster --name "$CLUSTER" --region "$REGION" >/dev/null 2>&1; then
+        if command -v kubectl >/dev/null 2>&1; then
+          aws eks update-kubeconfig --name "$CLUSTER" --region "$REGION" >/dev/null 2>&1
+          kubectl delete svc -A --field-selector spec.type=LoadBalancer --timeout=120s 2>&1 | sed 's/^/  /'
+          echo "  waiting 60s for LB controller to deprovision..."
+          sleep 60
+        fi
+      fi
+
+      # 2) Belt-and-braces: directly delete any LBs still in the VPC.
+      for arn in $(aws elbv2 describe-load-balancers --region "$REGION" \
+                     --query "LoadBalancers[?VpcId=='$VPC'].LoadBalancerArn" \
+                     --output text 2>/dev/null); do
+        echo "  deleting v2 LB: $arn"
+        aws elbv2 delete-load-balancer --load-balancer-arn "$arn" --region "$REGION"
+      done
+      for name in $(aws elb describe-load-balancers --region "$REGION" \
+                      --query "LoadBalancerDescriptions[?VPCId=='$VPC'].LoadBalancerName" \
+                      --output text 2>/dev/null); do
+        echo "  deleting classic ELB: $name"
+        aws elb delete-load-balancer --load-balancer-name "$name" --region "$REGION"
+      done
+
+      # 3) Give AWS a moment to release ENIs.
+      sleep 30
+
+      # 4) Sweep any unattached ENIs left in the VPC.
+      for eni in $(aws ec2 describe-network-interfaces --region "$REGION" \
+                     --filters "Name=vpc-id,Values=$VPC" "Name=status,Values=available" \
+                     --query "NetworkInterfaces[*].NetworkInterfaceId" \
+                     --output text 2>/dev/null); do
+        echo "  deleting orphaned ENI: $eni"
+        aws ec2 delete-network-interface --network-interface-id "$eni" --region "$REGION"
+      done
+
+      echo "Pre-destroy LB cleanup complete."
+      exit 0
+    EOT
+  }
+}
+
 resource "aws_subnet" "public" {
   count                   = 3
   vpc_id                  = aws_vpc.training.id
@@ -74,9 +163,9 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = merge(local.common_tags, {
-    Name                                                  = "${local.name_prefix}-public-${local.azs[count.index]}"
-    "kubernetes.io/role/elb"                              = "1"
-    "kubernetes.io/cluster/${local.name_prefix}-eks"      = "shared"
+    Name                                             = "${local.name_prefix}-public-${local.azs[count.index]}"
+    "kubernetes.io/role/elb"                         = "1"
+    "kubernetes.io/cluster/${local.name_prefix}-eks" = "shared"
   })
 }
 
@@ -87,9 +176,9 @@ resource "aws_subnet" "private" {
   availability_zone = local.azs[count.index]
 
   tags = merge(local.common_tags, {
-    Name                                                  = "${local.name_prefix}-private-${local.azs[count.index]}"
-    "kubernetes.io/role/internal-elb"                     = "1"
-    "kubernetes.io/cluster/${local.name_prefix}-eks"      = "shared"
+    Name                                             = "${local.name_prefix}-private-${local.azs[count.index]}"
+    "kubernetes.io/role/internal-elb"                = "1"
+    "kubernetes.io/cluster/${local.name_prefix}-eks" = "shared"
   })
 }
 
@@ -544,8 +633,8 @@ resource "aws_iam_role_policy" "codebuild_service" {
         Resource = "*"
       },
       {
-        Effect = "Allow"
-        Action = ["iam:PassRole"]
+        Effect   = "Allow"
+        Action   = ["iam:PassRole"]
         Resource = "*"
         Condition = {
           StringLike = {
@@ -1738,7 +1827,7 @@ resource "aws_rds_cluster" "lab4_aurora" {
 
   cluster_identifier          = "${local.name_prefix}-lab4-aurora"
   engine                      = "aurora-postgresql"
-  engine_version              = "16.11"  # Lab 4 bumps this via Blue/Green; 16.13 is the target
+  engine_version              = "16.11" # Lab 4 bumps this via Blue/Green; 16.13 is the target
   database_name               = "training"
   master_username             = "training_admin"
   manage_master_user_password = true
