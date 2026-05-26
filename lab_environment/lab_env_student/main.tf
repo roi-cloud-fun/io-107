@@ -74,9 +74,9 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = merge(local.common_tags, {
-    Name                                             = "${local.name_prefix}-public-${local.azs[count.index]}"
-    "kubernetes.io/role/elb"                         = "1"
-    "kubernetes.io/cluster/${local.name_prefix}-eks" = "shared"
+    Name                                                  = "${local.name_prefix}-public-${local.azs[count.index]}"
+    "kubernetes.io/role/elb"                              = "1"
+    "kubernetes.io/cluster/${local.name_prefix}-eks"      = "shared"
   })
 }
 
@@ -87,9 +87,9 @@ resource "aws_subnet" "private" {
   availability_zone = local.azs[count.index]
 
   tags = merge(local.common_tags, {
-    Name                                             = "${local.name_prefix}-private-${local.azs[count.index]}"
-    "kubernetes.io/role/internal-elb"                = "1"
-    "kubernetes.io/cluster/${local.name_prefix}-eks" = "shared"
+    Name                                                  = "${local.name_prefix}-private-${local.azs[count.index]}"
+    "kubernetes.io/role/internal-elb"                     = "1"
+    "kubernetes.io/cluster/${local.name_prefix}-eks"      = "shared"
   })
 }
 
@@ -321,14 +321,29 @@ resource "aws_eks_access_policy_association" "codebuild_admin" {
   depends_on = [aws_eks_access_entry.codebuild]
 }
 
-# Also grant the host running `terraform apply` cluster admin -- otherwise the
+# Grant the host running `terraform apply` cluster admin -- otherwise the
 # kubernetes provider (used to create per-lab namespaces) fails with
-# "Error: Unauthorized". `bootstrap_cluster_creator_admin_permissions = true`
-# on the cluster only applies at creation; for an existing cluster or a
-# different apply-host, we need an explicit access entry.
+# "Error: Unauthorized".
 #
-# Derivation: if `apply_host_principal_arn` is set, use it verbatim. Otherwise
-# infer from the caller identity:
+# Why this is a null_resource instead of `aws_eks_access_entry`:
+#   `bootstrap_cluster_creator_admin_permissions = true` on the cluster (above)
+#   makes EKS auto-create an access entry for the IAM principal that creates
+#   the cluster. When that principal is the same as the apply host (the common
+#   case -- you ran `terraform apply` from an EC2 instance with an instance
+#   profile, and the same EC2 will keep applying), an explicit
+#   `aws_eks_access_entry` resource collides with the auto-created one and
+#   `terraform apply` fails with `ResourceInUseException` (409). The AWS
+#   provider doesn't expose an "adopt on conflict" mode for this resource.
+#
+#   The AWS API itself IS idempotent if you tolerate the 409: re-calling
+#   create-access-entry on an existing principal returns 409 but the cluster
+#   state is correct; associate-access-policy is naturally idempotent (same
+#   principal+policy+scope is a no-op). So we drive both API calls from a
+#   null_resource that suppresses the 409 -- giving us a create-or-adopt
+#   workflow that's also robust to stale state from prior partial applies.
+#
+# Derivation of the principal ARN: if `apply_host_principal_arn` is set, use
+# it verbatim. Otherwise infer from the caller identity:
 #   - assumed-role ARN (e.g. EC2 instance profile, SSO session, Lambda):
 #       arn:aws:sts::<acct>:assumed-role/<RoleName>/<session>
 #     ->  arn:aws:iam::<acct>:role/<RoleName>
@@ -353,28 +368,54 @@ locals {
   apply_host_principal_arn = var.apply_host_principal_arn != "" ? var.apply_host_principal_arn : local._derived_apply_host_arn
 }
 
-resource "aws_eks_access_entry" "apply_host" {
-  cluster_name  = aws_eks_cluster.training.name
-  principal_arn = local.apply_host_principal_arn
-  type          = "STANDARD"
-
-  # Idempotent: if the principal already has an entry (e.g. created manually
-  # earlier), `terraform import` it once and this resource takes ownership.
-  lifecycle {
-    ignore_changes = [tags] # AWS may auto-apply tags on cluster-creator entries
-  }
-}
-
-resource "aws_eks_access_policy_association" "apply_host_admin" {
-  cluster_name  = aws_eks_cluster.training.name
-  principal_arn = local.apply_host_principal_arn
-  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-
-  access_scope {
-    type = "cluster"
+resource "null_resource" "apply_host_eks_access" {
+  triggers = {
+    cluster_name  = aws_eks_cluster.training.name
+    principal_arn = local.apply_host_principal_arn
+    region        = var.aws_region
   }
 
-  depends_on = [aws_eks_access_entry.apply_host]
+  provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
+    command     = <<-EOT
+      set -euo pipefail
+      CLUSTER="${self.triggers.cluster_name}"
+      PRINCIPAL="${self.triggers.principal_arn}"
+      REGION="${self.triggers.region}"
+      ERR=$(mktemp)
+      trap 'rm -f "$ERR"' EXIT
+
+      # 1) Create access entry -- tolerate 409 (means it already exists, fine).
+      if aws eks create-access-entry \
+            --cluster-name "$CLUSTER" \
+            --principal-arn "$PRINCIPAL" \
+            --type STANDARD \
+            --region "$REGION" >/dev/null 2>"$ERR"; then
+        echo "created access entry for $PRINCIPAL on $CLUSTER"
+      else
+        if grep -q ResourceInUseException "$ERR"; then
+          echo "access entry for $PRINCIPAL on $CLUSTER already exists -- adopting"
+        else
+          cat "$ERR" >&2
+          exit 1
+        fi
+      fi
+
+      # 2) Associate the cluster admin policy -- this is naturally idempotent;
+      #    AWS returns the existing association on re-invocation, no error.
+      aws eks associate-access-policy \
+        --cluster-name "$CLUSTER" \
+        --principal-arn "$PRINCIPAL" \
+        --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy \
+        --access-scope type=cluster \
+        --region "$REGION" >/dev/null
+      echo "ensured AmazonEKSClusterAdminPolicy on $PRINCIPAL for $CLUSTER"
+    EOT
+  }
+
+  # When the cluster goes away, all access entries on it go with it -- no
+  # destroy-time cleanup is needed for this null_resource.
+  depends_on = [aws_eks_cluster.training]
 }
 
 # EKS access entries take ~30s to become effective in the cluster data plane
@@ -383,7 +424,7 @@ resource "aws_eks_access_policy_association" "apply_host_admin" {
 # even though the access entry was just created. 45s is conservative.
 resource "time_sleep" "wait_for_apply_host_access" {
   create_duration = "45s"
-  depends_on      = [aws_eks_access_policy_association.apply_host_admin]
+  depends_on      = [null_resource.apply_host_eks_access]
 }
 
 resource "aws_iam_role" "eks_nodes" {
@@ -503,8 +544,8 @@ resource "aws_iam_role_policy" "codebuild_service" {
         Resource = "*"
       },
       {
-        Effect   = "Allow"
-        Action   = ["iam:PassRole"]
+        Effect = "Allow"
+        Action = ["iam:PassRole"]
         Resource = "*"
         Condition = {
           StringLike = {
@@ -1697,7 +1738,7 @@ resource "aws_rds_cluster" "lab4_aurora" {
 
   cluster_identifier          = "${local.name_prefix}-lab4-aurora"
   engine                      = "aurora-postgresql"
-  engine_version              = "16.11" # Lab 4 bumps this via Blue/Green; 16.13 is the target
+  engine_version              = "16.11"  # Lab 4 bumps this via Blue/Green; 16.13 is the target
   database_name               = "training"
   master_username             = "training_admin"
   manage_master_user_password = true
