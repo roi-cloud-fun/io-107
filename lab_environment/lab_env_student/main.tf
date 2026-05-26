@@ -892,7 +892,34 @@ resource "null_resource" "lab1_seed" {
     EOT
   }
 
-  depends_on = [aws_codecommit_repository.lab1]
+  # The seed pushes lab fixture code to main, which fires the EventBridge
+  # rule, which kicks off the per-student CodePipeline. The pipeline runs
+  # CodeBuild, which runs `helm upgrade --install` (lab1) / `sam deploy`
+  # (lab2) / `terraform plan + apply` (lab3, lab4) against AWS.
+  #
+  # That auto-trigger happens DURING `terraform apply`, not after. So we
+  # must not seed (and thus trigger the pipeline) until every AWS resource
+  # the pipeline's build needs is fully ready. Otherwise the first
+  # pipeline run races the infrastructure and fails (e.g. lab1's helm
+  # install hits an EKS API that isn't accepting traffic yet, or the
+  # CodeBuild project's IAM permissions are mid-propagation).
+  #
+  # Concretely, the EKS-using labs (lab1) need: cluster + node group +
+  # CodeBuild's access entry + the apply-host's access entry + the 45s
+  # propagation sleep. The non-EKS labs (lab2 SAM, lab3 OPA, lab4 Aurora
+  # CLI) still wait on these same gates -- harmless, and it keeps the
+  # depends_on consistent across labs.
+  depends_on = [
+    aws_codecommit_repository.lab1,
+    aws_codebuild_project.lab1,
+    aws_eks_node_group.training,
+    aws_eks_access_policy_association.codebuild_admin,
+    null_resource.apply_host_eks_access,
+    time_sleep.wait_for_apply_host_access,
+    aws_codepipeline.lab1,
+    aws_cloudwatch_event_rule.lab1_trigger,
+    aws_cloudwatch_event_target.lab1_trigger,
+  ]
 }
 
 resource "aws_codebuild_project" "lab1" {
@@ -1015,7 +1042,14 @@ resource "aws_codepipeline" "lab1" {
 
   tags = merge(local.common_tags, { Lab = "lab1" })
 
-  depends_on = [null_resource.lab1_seed]
+  # NOTE: previously this had `depends_on = [null_resource.<lab>_seed]` so
+  # the pipeline was created only after the repo was populated. Reversed
+  # for two reasons:
+  #   1. The seed now depends on the pipeline (so its push triggers the
+  #      already-existing pipeline cleanly), which would create a cycle.
+  #   2. CodePipeline can be created against an unpopulated CodeCommit
+  #      branch -- with PollForSourceChanges = false (above) it just
+  #      sits idle until the EventBridge rule fires it.
 }
 
 # EventBridge: a push to `main` on the per-student CodeCommit repo triggers
@@ -1051,26 +1085,18 @@ resource "aws_cloudwatch_event_target" "lab1_trigger" {
 }
 
 
-resource "kubernetes_namespace" "lab1" {
-  count = var.enable_lab1 ? 1 : 0
-
-  metadata {
-    name = "lab1-${local.effective_student_id}"
-    labels = {
-      "io107/course"  = "io107"
-      "io107/lab"     = "lab1"
-      "io107/student" = var.student_id
-    }
-  }
-
-  # Ordering: the apply-host access entry must exist AND have propagated to
-  # the EKS data plane BEFORE the kubernetes provider attempts any K8s API
-  # call, otherwise we get "Unauthorized". time_sleep handles the ~30s lag.
-  depends_on = [
-    aws_eks_node_group.training,
-    time_sleep.wait_for_apply_host_access,
-  ]
-}
+# K8s namespace `lab1-${local.effective_student_id}` is
+# created on demand by the lab's CodeBuild pipeline:
+#   helm upgrade --install ... --create-namespace
+# We deliberately do NOT manage it here as a `kubernetes_namespace` resource
+# because that races with the pipeline -- the CodeCommit seed scripts above
+# trigger the pipeline at apply time, and Helm's `--create-namespace` often
+# creates the namespace before Terraform's kubernetes provider gets to it,
+# producing "namespaces ... already exists" errors.
+#
+# The IRSA OIDC trust condition below references the namespace by literal
+# string in the IAM policy; no Terraform resource-level dependency on the
+# K8s namespace existing.
 
 
 
@@ -1264,7 +1290,34 @@ resource "null_resource" "lab2_seed" {
     EOT
   }
 
-  depends_on = [aws_codecommit_repository.lab2]
+  # The seed pushes lab fixture code to main, which fires the EventBridge
+  # rule, which kicks off the per-student CodePipeline. The pipeline runs
+  # CodeBuild, which runs `helm upgrade --install` (lab1) / `sam deploy`
+  # (lab2) / `terraform plan + apply` (lab3, lab4) against AWS.
+  #
+  # That auto-trigger happens DURING `terraform apply`, not after. So we
+  # must not seed (and thus trigger the pipeline) until every AWS resource
+  # the pipeline's build needs is fully ready. Otherwise the first
+  # pipeline run races the infrastructure and fails (e.g. lab1's helm
+  # install hits an EKS API that isn't accepting traffic yet, or the
+  # CodeBuild project's IAM permissions are mid-propagation).
+  #
+  # Concretely, the EKS-using labs (lab1) need: cluster + node group +
+  # CodeBuild's access entry + the apply-host's access entry + the 45s
+  # propagation sleep. The non-EKS labs (lab2 SAM, lab3 OPA, lab4 Aurora
+  # CLI) still wait on these same gates -- harmless, and it keeps the
+  # depends_on consistent across labs.
+  depends_on = [
+    aws_codecommit_repository.lab2,
+    aws_codebuild_project.lab2,
+    aws_eks_node_group.training,
+    aws_eks_access_policy_association.codebuild_admin,
+    null_resource.apply_host_eks_access,
+    time_sleep.wait_for_apply_host_access,
+    aws_codepipeline.lab2,
+    aws_cloudwatch_event_rule.lab2_trigger,
+    aws_cloudwatch_event_target.lab2_trigger,
+  ]
 }
 
 resource "aws_codebuild_project" "lab2" {
@@ -1372,7 +1425,14 @@ resource "aws_codepipeline" "lab2" {
 
   tags = merge(local.common_tags, { Lab = "lab2" })
 
-  depends_on = [null_resource.lab2_seed]
+  # NOTE: previously this had `depends_on = [null_resource.<lab>_seed]` so
+  # the pipeline was created only after the repo was populated. Reversed
+  # for two reasons:
+  #   1. The seed now depends on the pipeline (so its push triggers the
+  #      already-existing pipeline cleanly), which would create a cycle.
+  #   2. CodePipeline can be created against an unpopulated CodeCommit
+  #      branch -- with PollForSourceChanges = false (above) it just
+  #      sits idle until the EventBridge rule fires it.
 }
 
 # EventBridge: a push to `main` on the per-student CodeCommit repo triggers
@@ -1490,7 +1550,34 @@ resource "null_resource" "lab3_seed" {
     EOT
   }
 
-  depends_on = [aws_codecommit_repository.lab3]
+  # The seed pushes lab fixture code to main, which fires the EventBridge
+  # rule, which kicks off the per-student CodePipeline. The pipeline runs
+  # CodeBuild, which runs `helm upgrade --install` (lab1) / `sam deploy`
+  # (lab2) / `terraform plan + apply` (lab3, lab4) against AWS.
+  #
+  # That auto-trigger happens DURING `terraform apply`, not after. So we
+  # must not seed (and thus trigger the pipeline) until every AWS resource
+  # the pipeline's build needs is fully ready. Otherwise the first
+  # pipeline run races the infrastructure and fails (e.g. lab1's helm
+  # install hits an EKS API that isn't accepting traffic yet, or the
+  # CodeBuild project's IAM permissions are mid-propagation).
+  #
+  # Concretely, the EKS-using labs (lab1) need: cluster + node group +
+  # CodeBuild's access entry + the apply-host's access entry + the 45s
+  # propagation sleep. The non-EKS labs (lab2 SAM, lab3 OPA, lab4 Aurora
+  # CLI) still wait on these same gates -- harmless, and it keeps the
+  # depends_on consistent across labs.
+  depends_on = [
+    aws_codecommit_repository.lab3,
+    aws_codebuild_project.lab3,
+    aws_eks_node_group.training,
+    aws_eks_access_policy_association.codebuild_admin,
+    null_resource.apply_host_eks_access,
+    time_sleep.wait_for_apply_host_access,
+    aws_codepipeline.lab3,
+    aws_cloudwatch_event_rule.lab3_trigger,
+    aws_cloudwatch_event_target.lab3_trigger,
+  ]
 }
 
 resource "aws_codebuild_project" "lab3" {
@@ -1581,7 +1668,14 @@ resource "aws_codepipeline" "lab3" {
 
   tags = merge(local.common_tags, { Lab = "lab3" })
 
-  depends_on = [null_resource.lab3_seed]
+  # NOTE: previously this had `depends_on = [null_resource.<lab>_seed]` so
+  # the pipeline was created only after the repo was populated. Reversed
+  # for two reasons:
+  #   1. The seed now depends on the pipeline (so its push triggers the
+  #      already-existing pipeline cleanly), which would create a cycle.
+  #   2. CodePipeline can be created against an unpopulated CodeCommit
+  #      branch -- with PollForSourceChanges = false (above) it just
+  #      sits idle until the EventBridge rule fires it.
 }
 
 # EventBridge: a push to `main` on the per-student CodeCommit repo triggers
@@ -1699,7 +1793,35 @@ resource "null_resource" "lab4_seed" {
     EOT
   }
 
-  depends_on = [aws_codecommit_repository.lab4]
+  # The seed pushes lab fixture code to main, which fires the EventBridge
+  # rule, which kicks off the per-student CodePipeline. The pipeline runs
+  # CodeBuild, which runs `helm upgrade --install` (lab1) / `sam deploy`
+  # (lab2) / `terraform plan + apply` (lab3, lab4) against AWS.
+  #
+  # That auto-trigger happens DURING `terraform apply`, not after. So we
+  # must not seed (and thus trigger the pipeline) until every AWS resource
+  # the pipeline's build needs is fully ready. Otherwise the first
+  # pipeline run races the infrastructure and fails (e.g. lab1's helm
+  # install hits an EKS API that isn't accepting traffic yet, or the
+  # CodeBuild project's IAM permissions are mid-propagation).
+  #
+  # Concretely, the EKS-using labs (lab1) need: cluster + node group +
+  # CodeBuild's access entry + the apply-host's access entry + the 45s
+  # propagation sleep. The non-EKS labs (lab2 SAM, lab3 OPA, lab4 Aurora
+  # CLI) still wait on these same gates -- harmless, and it keeps the
+  # depends_on consistent across labs.
+  depends_on = [
+    aws_codecommit_repository.lab4,
+    aws_codebuild_project.lab4,
+    aws_eks_node_group.training,
+    aws_eks_access_policy_association.codebuild_admin,
+    null_resource.apply_host_eks_access,
+    time_sleep.wait_for_apply_host_access,
+    aws_rds_cluster_instance.lab4_aurora_writer,
+    aws_codepipeline.lab4,
+    aws_cloudwatch_event_rule.lab4_trigger,
+    aws_cloudwatch_event_target.lab4_trigger,
+  ]
 }
 
 resource "aws_codebuild_project" "lab4" {
@@ -1803,7 +1925,14 @@ resource "aws_codepipeline" "lab4" {
 
   tags = merge(local.common_tags, { Lab = "lab4" })
 
-  depends_on = [null_resource.lab4_seed]
+  # NOTE: previously this had `depends_on = [null_resource.<lab>_seed]` so
+  # the pipeline was created only after the repo was populated. Reversed
+  # for two reasons:
+  #   1. The seed now depends on the pipeline (so its push triggers the
+  #      already-existing pipeline cleanly), which would create a cycle.
+  #   2. CodePipeline can be created against an unpopulated CodeCommit
+  #      branch -- with PollForSourceChanges = false (above) it just
+  #      sits idle until the EventBridge rule fires it.
 }
 
 # EventBridge: a push to `main` on the per-student CodeCommit repo triggers

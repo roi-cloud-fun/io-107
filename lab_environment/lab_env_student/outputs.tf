@@ -86,9 +86,14 @@ output "lab1_codecommit_repo_name" {
   description = "lab1 per-student CodeCommit repository name."
 }
 
+# Namespace name is a deterministic string -- helm creates it at deploy time
+# via `--create-namespace`. We surface it as an output so the lab body can
+# reference it as `$LABN_NAMESPACE` without depending on a Terraform
+# kubernetes_namespace resource (that resource raced the helm install and
+# was removed -- see main.tf for the rationale).
 output "lab1_namespace" {
-  value       = try(kubernetes_namespace.lab1[0].metadata[0].name, "(disabled)")
-  description = "lab1 K8s namespace."
+  value       = var.enable_lab1 ? "lab1-${local.effective_student_id}" : "(disabled)"
+  description = "lab1 K8s namespace (created by helm at first pipeline run)."
 }
 output "lab1_myapp_dev_role_arn" {
   value       = try(aws_iam_role.lab1_myapp_dev_role[0].arn, "(disabled)")
