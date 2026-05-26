@@ -10,7 +10,7 @@
 #   - EKS cluster + managed node group + IRSA OIDC provider
 #   - Shared CodeBuild service role + CodePipeline service role
 #   - Per-lab: CodePipeline + CodeBuild project + S3 artifact bucket
-#   - lab1: K8s namespace `lab1-${var.student_id}`, IRSA roles, pipeline + buildspec wiring
+#   - lab1: pipeline + buildspec wiring
 #   - lab2: pipeline + buildspec wiring
 #   - lab3: pipeline + buildspec wiring
 #   - lab4: Aurora cluster `training-aurora-${var.student_id}`, pipeline + buildspec wiring
@@ -175,7 +175,12 @@ resource "aws_kms_key" "training_logs" {
 resource "aws_ecr_repository" "app" {
   for_each = toset(["myapp", "nginx"])
 
-  name                 = "${local.name_prefix}-${each.value}"
+  # Bare app name (no student_id prefix). The buildspec's docker push pattern is
+  # `$ECR_REGISTRY/$APP_NAME:$IMAGE_TAG` where APP_NAME is "myapp" -- so the
+  # repository must be named "myapp" exactly. Per-run isolation comes from the
+  # whole module being torn down with `terraform destroy`; the unified module is
+  # one-student-at-a-time by design.
+  name                 = each.value
   image_tag_mutability = "MUTABLE"
   force_delete         = true
 
@@ -278,11 +283,42 @@ resource "aws_eks_cluster" "training" {
     endpoint_public_access  = true
   }
 
+  # Access entries API is required so we can add the CodeBuild service role as a
+  # cluster principal below. `API_AND_CONFIG_MAP` is the current EKS default but
+  # we set it explicitly here so future provider versions don't surprise us.
+  access_config {
+    authentication_mode                         = "API_AND_CONFIG_MAP"
+    bootstrap_cluster_creator_admin_permissions = true
+  }
+
   enabled_cluster_log_types = ["api", "audit", "authenticator"]
 
   depends_on = [aws_iam_role_policy_attachment.eks_cluster_policy]
 
   tags = local.common_tags
+}
+
+# Grant the CodeBuild service role kubectl/helm access to the cluster. Without
+# this, `helm upgrade` from CodeBuild fails with
+#   "Kubernetes cluster unreachable: the server has asked for the client to
+#    provide credentials"
+# because the role is authenticated to AWS but not authorised in the cluster.
+resource "aws_eks_access_entry" "codebuild" {
+  cluster_name  = aws_eks_cluster.training.name
+  principal_arn = aws_iam_role.codebuild_service.arn
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "codebuild_admin" {
+  cluster_name  = aws_eks_cluster.training.name
+  principal_arn = aws_iam_role.codebuild_service.arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.codebuild]
 }
 
 resource "aws_iam_role" "eks_nodes" {
@@ -497,7 +533,7 @@ resource "aws_iam_role_policy" "eventbridge_codepipeline" {
 
 # ----------------------------------------------------------------------------
 # LAB1 -- Lab 1: End-to-End EKS Deployment Pipeline
-# Fixture repo: https://github.com/jessetop/io107-lab1-eks-app
+# Fixture repo: 
 # ----------------------------------------------------------------------------
 
 resource "aws_s3_bucket" "lab1_artifacts" {
@@ -604,7 +640,7 @@ resource "aws_codebuild_project" "lab1" {
     }
     environment_variable {
       name  = "NAMESPACE"
-      value = "lab1-${var.student_id}"
+      value = "-${var.student_id}"
     }
     environment_variable {
       name  = "APP_NAME"
@@ -719,139 +755,14 @@ resource "aws_cloudwatch_event_target" "lab1_trigger" {
 }
 
 
-resource "kubernetes_namespace" "lab1" {
-  count = var.enable_lab1 ? 1 : 0
 
-  metadata {
-    name = "lab1-${var.student_id}"
-    labels = {
-      "io107/course"  = "io107"
-      "io107/lab"     = "lab1"
-      "io107/student" = var.student_id
-    }
-  }
-
-  depends_on = [aws_eks_node_group.training]
-}
-
-
-
-resource "aws_iam_role" "lab1_myapp_dev_role" {
-  count = var.enable_lab1 ? 1 : 0
-
-  name = "${local.name_prefix}-myapp-dev-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = {
-        Federated = aws_iam_openid_connect_provider.eks_irsa.arn
-      }
-      Action = "sts:AssumeRoleWithWebIdentity"
-      Condition = {
-        StringEquals = {
-          "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:lab1-${var.student_id}:myapp-sa"
-          "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:aud" = "sts.amazonaws.com"
-        }
-      }
-    }]
-  })
-
-  tags = merge(local.common_tags, { Lab = "lab1", IrsaRole = "myapp-dev-role" })
-}
-
-resource "aws_iam_role_policy" "lab1_myapp_dev_role" {
-  count = var.enable_lab1 ? 1 : 0
-  name  = "${local.name_prefix}-myapp-dev-role-inline"
-  role  = aws_iam_role.lab1_myapp_dev_role[0].id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket", "s3:GetObject"]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = ["kms:Decrypt", "kms:GenerateDataKey"]
-        Resource = [
-          aws_kms_key.training_s3.arn,
-          aws_kms_key.training_logs.arn
-        ]
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role" "lab1_myapp_stg_role" {
-  count = var.enable_lab1 ? 1 : 0
-
-  name = "${local.name_prefix}-myapp-stg-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = {
-        Federated = aws_iam_openid_connect_provider.eks_irsa.arn
-      }
-      Action = "sts:AssumeRoleWithWebIdentity"
-      Condition = {
-        StringEquals = {
-          "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:lab1-${var.student_id}:myapp-sa"
-          "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:aud" = "sts.amazonaws.com"
-        }
-      }
-    }]
-  })
-
-  tags = merge(local.common_tags, { Lab = "lab1", IrsaRole = "myapp-stg-role" })
-}
-
-resource "aws_iam_role_policy" "lab1_myapp_stg_role" {
-  count = var.enable_lab1 ? 1 : 0
-  name  = "${local.name_prefix}-myapp-stg-role-inline"
-  role  = aws_iam_role.lab1_myapp_stg_role[0].id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket", "s3:GetObject"]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = ["kms:Decrypt", "kms:GenerateDataKey"]
-        Resource = [
-          aws_kms_key.training_s3.arn,
-          aws_kms_key.training_logs.arn
-        ]
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
-        Resource = "*"
-      }
-    ]
-  })
-}
 
 
 
 
 # ----------------------------------------------------------------------------
 # LAB2 -- Lab 2: Lambda Deployment with SAM
-# Fixture repo: https://github.com/jessetop/io107-lab2-sam-app
+# Fixture repo: 
 # ----------------------------------------------------------------------------
 
 resource "aws_s3_bucket" "lab2_artifacts" {
