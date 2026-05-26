@@ -35,6 +35,28 @@ phases:
           stg) IRSA_ROLE_ARN="$IRSA_ROLE_ARN_STG" ;;
           *)   echo "Unknown ENVIRONMENT: $ENVIRONMENT"; exit 1 ;;
         esac
+      # Self-heal stuck Helm releases. If a previous build was killed mid-
+      # operation (CodeBuild timeout, Docker Hub 429, AWS API blip, etc.),
+      # Helm leaves the release in `pending-install` / `pending-upgrade` /
+      # `pending-rollback` state and refuses to start a new operation with
+      # "another operation (install/upgrade/rollback) is in progress".
+      # Detect that and recover before running `helm upgrade --install`.
+      - |
+        STATUS=$(helm status "$APP_NAME" -n "$NAMESPACE" -o json 2>/dev/null | \
+                   python3 -c "import json,sys; print(json.load(sys.stdin).get('info',{}).get('status',''))" 2>/dev/null || echo "")
+        case "$STATUS" in
+          pending-install)
+            echo "Recovering stuck release: pending-install -> uninstall (never finished, nothing to keep)"
+            helm uninstall "$APP_NAME" -n "$NAMESPACE" --ignore-not-found || true
+            ;;
+          pending-upgrade|pending-rollback)
+            echo "Recovering stuck release: $STATUS -> rollback to previous good revision"
+            helm rollback "$APP_NAME" -n "$NAMESPACE" || true
+            ;;
+          *)
+            echo "Release status: ${STATUS:-not-installed} -- no recovery needed"
+            ;;
+        esac
       - |
         helm upgrade --install $APP_NAME charts/myapp \
           --namespace $NAMESPACE \
