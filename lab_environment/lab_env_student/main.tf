@@ -10,10 +10,10 @@
 #   - EKS cluster + managed node group + IRSA OIDC provider
 #   - Shared CodeBuild service role + CodePipeline service role
 #   - Per-lab: CodePipeline + CodeBuild project + S3 artifact bucket
-#   - lab1: K8s namespace `lab1-${var.student_id}`, IRSA roles, pipeline + buildspec wiring
+#   - lab1: K8s namespace `lab1-<student-id>-<run-suffix>`, IRSA roles, pipeline + buildspec wiring
 #   - lab2: pipeline + buildspec wiring
 #   - lab3: pipeline + buildspec wiring
-#   - lab4: Aurora cluster `training-aurora-${var.student_id}`, pipeline + buildspec wiring
+#   - lab4: Aurora cluster `<course-id>-<student-id>-<run-suffix>-lab4-aurora`, pipeline + buildspec wiring
 #
 # Pre-requisites the caller must do MANUALLY (Terraform cannot do these):
 #   1. Bootstrap an S3 bucket for the Terraform backend (one-time per account).
@@ -41,18 +41,39 @@ data "aws_availability_zones" "available" {
 
 data "aws_caller_identity" "current" {}
 
+# Random suffix that uniquifies every resource name across applies. AWS doesn't
+# always propagate deletes instantly (EKS namespaces, ENIs, KMS aliases, S3
+# buckets in deletion-protected state, etc.) so re-applying with the same
+# student_id can collide with leftovers from a prior run. The suffix sidesteps
+# that entirely -- each `terraform apply` from a fresh state gets a new 6-char
+# hex tag, guaranteeing no name collisions. Existing applies stay stable
+# because the random_id persists in Terraform state.
+#
+# To pin a specific suffix (e.g. for reproducible LTF runs), set
+# `name_suffix` in terraform.tfvars; the random_id is then ignored.
+resource "random_id" "run" {
+  byte_length = 3
+}
+
 locals {
   azs = slice(data.aws_availability_zones.available.names, 0, 3)
+
+  # Effective unique tag: explicit override > random per-apply.
+  _run_suffix          = var.name_suffix != "" ? var.name_suffix : random_id.run.hex
+  effective_student_id = "${var.student_id}-${local._run_suffix}"
 
   common_tags = {
     Course      = "IO-107 SDLC Pipeline"
     Environment = "training"
     ManagedBy   = "terraform"
     StudentId   = var.student_id
+    RunSuffix   = local._run_suffix
   }
 
-  # Resource naming: every per-student resource carries the student_id suffix.
-  name_prefix = "io107-${var.student_id}"
+  # Resource naming: every per-student resource carries the student_id +
+  # per-run suffix. `name_prefix` is the canonical prefix used by ALL
+  # resource names in this module.
+  name_prefix = "io107-${local.effective_student_id}"
 }
 
 # ============================================================================
@@ -903,7 +924,7 @@ resource "aws_codebuild_project" "lab1" {
     }
     environment_variable {
       name  = "NAMESPACE"
-      value = "lab1-${var.student_id}"
+      value = "lab1-${local.effective_student_id}"
     }
     environment_variable {
       name  = "APP_NAME"
@@ -1034,7 +1055,7 @@ resource "kubernetes_namespace" "lab1" {
   count = var.enable_lab1 ? 1 : 0
 
   metadata {
-    name = "lab1-${var.student_id}"
+    name = "lab1-${local.effective_student_id}"
     labels = {
       "io107/course"  = "io107"
       "io107/lab"     = "lab1"
@@ -1068,7 +1089,7 @@ resource "aws_iam_role" "lab1_myapp_dev_role" {
       Action = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = {
-          "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:lab1-${var.student_id}:myapp-sa"
+          "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:lab1-${local.effective_student_id}:myapp-sa"
           "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:aud" = "sts.amazonaws.com"
         }
       }
@@ -1123,7 +1144,7 @@ resource "aws_iam_role" "lab1_myapp_stg_role" {
       Action = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = {
-          "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:lab1-${var.student_id}:myapp-sa"
+          "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:lab1-${local.effective_student_id}:myapp-sa"
           "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:aud" = "sts.amazonaws.com"
         }
       }

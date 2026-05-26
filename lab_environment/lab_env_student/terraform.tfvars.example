@@ -11,6 +11,13 @@ student_id = "REPLACE-ME"
 
 vpc_cidr = "10.20.0.0/16"
 
+# Optional: pin a specific suffix appended to every resource name.
+# Leave commented out for a random 6-char suffix per `terraform apply`
+# (recommended -- guarantees no collisions with leftovers from prior runs).
+# Set this when you need reproducible names (e.g. an LTF test that expects
+# a fixed cluster name across teardown/rebuild cycles).
+# name_suffix = ""
+
 # Toggle individual labs (default: all enabled)
 # enable_lab1 = true
 # enable_lab2 = true

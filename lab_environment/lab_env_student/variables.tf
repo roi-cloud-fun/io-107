@@ -19,6 +19,23 @@ variable "student_id" {
   }
 }
 
+variable "name_suffix" {
+  description = <<-DESC
+    Optional override for the per-apply uniqueness suffix appended to
+    resource names. Leave empty (default) to use a random 6-char hex
+    string generated once and persisted in Terraform state. Set this
+    when you need reproducible names across teardown/rebuild cycles
+    (e.g. LTF smoke tests that expect a fixed cluster name).
+  DESC
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.name_suffix == "" || can(regex("^[a-z0-9-]{1,12}$", var.name_suffix))
+    error_message = "name_suffix must be empty or lowercase alphanumeric/dashes, 1-12 chars."
+  }
+}
+
 variable "vpc_cidr" {
   description = "CIDR for the lab VPC. Pick something that doesn't overlap with anything else in the account."
   type        = string
