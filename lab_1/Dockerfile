@@ -1,5 +1,11 @@
 # syntax=docker/dockerfile:1
-FROM python:3.12-slim
+# Use AWS's public ECR mirror of Docker Hub instead of pulling docker.io
+# directly. Docker Hub anonymous pulls are rate-limited to 100 per 6h per
+# source IP, and CodeBuild fleet IPs are shared -- so a class of students
+# all building at once will trip the limit and the build will 429.
+# public.ecr.aws/docker/library/ is the same image, hosted on AWS, no
+# rate limit, no auth needed.
+FROM public.ecr.aws/docker/library/python:3.12-slim
 
 # Don't write .pyc files, flush logs immediately
 ENV PYTHONDONTWRITEBYTECODE=1 \
