@@ -665,6 +665,7 @@ resource "aws_iam_role_policy" "codebuild_service" {
               "lambda.amazonaws.com",
               "apigateway.amazonaws.com",
               "cloudformation.amazonaws.com",
+              "codedeploy.amazonaws.com",
             ]
           }
         }
@@ -728,6 +729,31 @@ resource "aws_iam_role_policy" "codebuild_service" {
           "iam:ListAttachedRolePolicies",
           "iam:TagRole",
           "iam:UntagRole",
+          # SAM's AutoPublishAlias + DeploymentPreference (Canary10Percent5Minutes)
+          # provisions an AWS::CodeDeploy::Application + DeploymentGroup as part
+          # of the CFN stack. CodeBuild needs these to drive CFN through that.
+          # Scoped to "*" because the resource ARNs include CFN-generated suffixes
+          # only known at deploy time. Acceptable for a lab account.
+          "codedeploy:CreateApplication",
+          "codedeploy:DeleteApplication",
+          "codedeploy:GetApplication",
+          "codedeploy:UpdateApplication",
+          "codedeploy:CreateDeploymentGroup",
+          "codedeploy:DeleteDeploymentGroup",
+          "codedeploy:GetDeploymentGroup",
+          "codedeploy:UpdateDeploymentGroup",
+          "codedeploy:CreateDeployment",
+          "codedeploy:GetDeployment",
+          "codedeploy:GetDeploymentConfig",
+          "codedeploy:RegisterApplicationRevision",
+          "codedeploy:TagResource",
+          "codedeploy:UntagResource",
+          "codedeploy:ListTagsForResource",
+          # SAM's DeploymentPreference references an ApiErrorAlarm
+          # (AWS::CloudWatch::Alarm). The CFN stack creates that alarm.
+          "cloudwatch:PutMetricAlarm",
+          "cloudwatch:DeleteAlarms",
+          "cloudwatch:DescribeAlarms",
         ]
         Resource = "*"
       }
