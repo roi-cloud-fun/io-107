@@ -141,9 +141,11 @@ phases:
           terraform apply -refresh-only -auto-approve -input=false -no-color
         fi
 
+# Include the full working tree (not just the terraform/ subdir) so the
+# Validate and Deploy stages can re-run this same buildspec against the
+# downloaded artifact. They need buildspec.yml + policies/* + terraform/*
+# all present at the root.
 artifacts:
-  base-directory: terraform
   files:
-    - tfplan
-    - tfplan.json
+    - '**/*'
   discard-paths: no

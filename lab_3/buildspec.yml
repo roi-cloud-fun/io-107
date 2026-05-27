@@ -94,8 +94,12 @@ phases:
             ;;
         esac
 
+# The output artifact must include the full working tree, not just the
+# tfplan artifacts. Downstream stages (Validate, Deploy) load this artifact
+# as their primary source and need buildspec.yml + terraform/* + kubernetes/*
+# + policies/* available at the root so the buildspec can re-run with a
+# different LAB_PHASE.
 artifacts:
   files:
-    - tfplan.json
-    - terraform/tfplan
+    - '**/*'
   discard-paths: no

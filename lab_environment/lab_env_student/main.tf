@@ -1714,7 +1714,6 @@ resource "aws_codepipeline" "lab3" {
             type  = "PLAINTEXT"
           }
         ])
-        PrimarySource = "source_output"
       }
     }
   }
@@ -1738,7 +1737,6 @@ resource "aws_codepipeline" "lab3" {
             type  = "PLAINTEXT"
           }
         ])
-        PrimarySource = "source_output"
       }
     }
   }
@@ -2038,7 +2036,6 @@ resource "aws_codepipeline" "lab4" {
             type  = "PLAINTEXT"
           }
         ])
-        PrimarySource = "source_output"
       }
     }
   }
@@ -2077,7 +2074,6 @@ resource "aws_codepipeline" "lab4" {
             type  = "PLAINTEXT"
           }
         ])
-        PrimarySource = "source_output"
       }
     }
   }
