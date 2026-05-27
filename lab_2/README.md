@@ -500,7 +500,7 @@ Leave everything else alone — `terraform destroy` from `lab_env_student/` at e
 
 ## Next Steps
 
-In **Lab 3: Policy-as-Code Evaluation & Failure Remediation**, you'll deploy a Terraform template that intentionally violates the OPA policies, observe the pipeline halt at the Validate stage, read the Conftest output, and remediate each violation. The pipeline shape extends to Source → Build → **Validate (OPA)** → Approval → Deploy.
+In **Lab 3: Policy-as-Code Evaluation and Failure Remediation**, you'll deploy a Terraform template that intentionally violates the OPA policies, observe the pipeline halt at the Validate stage, read the Conftest output, and remediate each violation. The pipeline shape extends to Source → Build → **Validate (OPA)** → Approval → Deploy.
 
 ---
 
