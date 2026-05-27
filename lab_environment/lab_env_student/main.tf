@@ -1661,6 +1661,16 @@ resource "aws_codepipeline" "lab3" {
   }
 
 
+  # Multi-stage pipeline (Source / Build / Validate / [Approval] / Deploy)
+  # for labs where the policy gate's halt should be visible as its own
+  # red stage in the CodePipeline UI, rather than buried inside a single
+  # Build stage's CodeBuild log.
+  #
+  # All three CodeBuild actions (Build, Validate, Deploy) invoke the SAME
+  # CodeBuild project; the pipeline overrides the phase env var per action
+  # via EnvironmentVariables, and the buildspec switches behavior on it.
+  # lab3 uses LAB_PHASE; lab4 uses TF_PHASE (historical -- lab4's
+  # buildspec already had TF_PHASE switching before this refactor).
   stage {
     name = "Build"
     action {
@@ -1674,6 +1684,61 @@ resource "aws_codepipeline" "lab3" {
 
       configuration = {
         ProjectName = aws_codebuild_project.lab3[0].name
+        EnvironmentVariables = jsonencode([
+          {
+            name  = "LAB_PHASE"
+            value = "plan"
+            type  = "PLAINTEXT"
+          }
+        ])
+      }
+    }
+  }
+
+  stage {
+    name = "Validate"
+    action {
+      name            = "Validate"
+      category        = "Build"
+      owner           = "AWS"
+      provider        = "CodeBuild"
+      version         = "1"
+      input_artifacts = ["build_output"]
+
+      configuration = {
+        ProjectName = aws_codebuild_project.lab3[0].name
+        EnvironmentVariables = jsonencode([
+          {
+            name  = "LAB_PHASE"
+            value = "validate"
+            type  = "PLAINTEXT"
+          }
+        ])
+        PrimarySource = "source_output"
+      }
+    }
+  }
+
+  stage {
+    name = "Deploy"
+    action {
+      name            = "Deploy"
+      category        = "Build"
+      owner           = "AWS"
+      provider        = "CodeBuild"
+      version         = "1"
+      input_artifacts = ["build_output"]
+
+      configuration = {
+        ProjectName = aws_codebuild_project.lab3[0].name
+        EnvironmentVariables = jsonencode([
+          {
+            name  = "LAB_PHASE"
+            value = "deploy"
+            type  = "PLAINTEXT"
+          }
+        ])
+        PrimarySource = "source_output"
       }
     }
   }
@@ -1920,6 +1985,16 @@ resource "aws_codepipeline" "lab4" {
   }
 
 
+  # Multi-stage pipeline (Source / Build / Validate / [Approval] / Deploy)
+  # for labs where the policy gate's halt should be visible as its own
+  # red stage in the CodePipeline UI, rather than buried inside a single
+  # Build stage's CodeBuild log.
+  #
+  # All three CodeBuild actions (Build, Validate, Deploy) invoke the SAME
+  # CodeBuild project; the pipeline overrides the phase env var per action
+  # via EnvironmentVariables, and the buildspec switches behavior on it.
+  # lab3 uses LAB_PHASE; lab4 uses TF_PHASE (historical -- lab4's
+  # buildspec already had TF_PHASE switching before this refactor).
   stage {
     name = "Build"
     action {
@@ -1933,6 +2008,76 @@ resource "aws_codepipeline" "lab4" {
 
       configuration = {
         ProjectName = aws_codebuild_project.lab4[0].name
+        EnvironmentVariables = jsonencode([
+          {
+            name  = "TF_PHASE"
+            value = "plan"
+            type  = "PLAINTEXT"
+          }
+        ])
+      }
+    }
+  }
+
+  stage {
+    name = "Validate"
+    action {
+      name            = "Validate"
+      category        = "Build"
+      owner           = "AWS"
+      provider        = "CodeBuild"
+      version         = "1"
+      input_artifacts = ["build_output"]
+
+      configuration = {
+        ProjectName = aws_codebuild_project.lab4[0].name
+        EnvironmentVariables = jsonencode([
+          {
+            name  = "TF_PHASE"
+            value = "validate"
+            type  = "PLAINTEXT"
+          }
+        ])
+        PrimarySource = "source_output"
+      }
+    }
+  }
+
+  stage {
+    name = "Approval"
+    action {
+      name     = "ApproveDeploy"
+      category = "Approval"
+      owner    = "AWS"
+      provider = "Manual"
+      version  = "1"
+
+      configuration = {
+        CustomData = "Approve to apply the Aurora engine version change via Blue/Green deployment. Confirm the planned target_engine_version is correct before proceeding."
+      }
+    }
+  }
+
+  stage {
+    name = "Deploy"
+    action {
+      name            = "Deploy"
+      category        = "Build"
+      owner           = "AWS"
+      provider        = "CodeBuild"
+      version         = "1"
+      input_artifacts = ["build_output"]
+
+      configuration = {
+        ProjectName = aws_codebuild_project.lab4[0].name
+        EnvironmentVariables = jsonencode([
+          {
+            name  = "TF_PHASE"
+            value = "apply"
+            type  = "PLAINTEXT"
+          }
+        ])
+        PrimarySource = "source_output"
       }
     }
   }
