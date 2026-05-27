@@ -20,11 +20,14 @@ region = "us-east-1"
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = false
 fail_on_empty_changeset = false
-resolve_s3 = true
+# resolve_s3 NOT set here: the buildspec passes `--s3-bucket $ARTIFACT_BUCKET`
+# explicitly (the per-student artifact bucket Terraform created in
+# lab_env_student/). Having `resolve_s3 = true` here causes
+#   Error: Cannot use both --resolve-s3 and --s3-bucket parameters.
 parameter_overrides = "Environment=\"dev\" LogLevel=\"INFO\""
 
 [default.package.parameters]
-resolve_s3 = true
+# Same reason as above -- buildspec passes --s3-bucket explicitly.
 
 [default.sync.parameters]
 watch = true
