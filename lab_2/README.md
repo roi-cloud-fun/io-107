@@ -193,26 +193,42 @@ echo "Pipeline:    $LAB2_PIPELINE_NAME"
           Method: GET
     ```
 
-11. Edit `src/app.py`. Add the `POST /items` route plus a `create_item` function:
+11. Edit `src/app.py`. The fixture's `app.py` already contains a `create_item` function further down the file (the platform team pre-defined it for you), but the route branch that dispatches `POST /items` to it is **commented out**. Your job is to uncomment those two lines.
+
+    Find this block near the top of the file:
 
     ```python
-    def handler(event, context):
-        path = event.get('path', '')
-        method = event.get('httpMethod', '')
-        logger.info(f"Request: {method} {path}")
+        elif path == '/items' and method == 'GET':
+            return get_items()
+        # Task 4: students add the POST /items branch here.
+        # elif path == '/items' and method == 'POST':
+        #     return create_item(event)
+        else:
+            return {
+    ```
 
-        if path == '/health':
-            return health_check()
+    Remove the `#` from the two commented lines, so the block becomes:
+
+    ```python
         elif path == '/items' and method == 'GET':
             return get_items()
         elif path == '/items' and method == 'POST':
             return create_item(event)
         else:
             return {
-                'statusCode': 404,
-                'body': json.dumps({'error': 'Not found'})
-            }
+    ```
 
+    Quick sanity check after editing:
+
+    ```bash
+    grep "elif path" src/app.py
+    ```
+
+    Should print TWO lines — both the GET and POST branches without leading `#`. If only the GET line appears, the POST branch is still commented and the request will fall through to the `else: 404` handler.
+
+    For reference, the `create_item` function that the route now calls is already defined further down the file:
+
+    ```python
     def create_item(event):
         try:
             body = json.loads(event.get('body', '{}'))
@@ -411,7 +427,7 @@ Before finishing, confirm you have completed:
 - [ ] Located the `AutoPublishAlias`, `DeploymentPreference`, and `Alarms` properties on `ApiFunction`
 - [ ] Located `ApiErrorAlarm` and understood its role in automatic rollback
 - [ ] Added a `CreateItem` event for `POST /items` to `template.yaml`
-- [ ] Added the `create_item` handler and route branch to `src/app.py`
+- [ ] Uncommented the `POST /items` route branch in `src/app.py` (the `create_item` function was pre-defined; just the dispatcher needs uncommenting)
 - [ ] Committed and pushed to `main`, triggering the pipeline
 - [ ] Observed Source and Build stages complete in AWS CodePipeline
 - [ ] Reviewed the CodeBuild log and confirmed `sam build`, `sam package`, and `sam deploy` all ran successfully
@@ -484,7 +500,7 @@ Leave everything else alone — `terraform destroy` from `lab_env_student/` at e
 
 ## Next Steps
 
-In **Lab 3: Policy-as-Code Evaluation and Failure Remediation**, you'll deploy a Terraform template that intentionally violates the OPA policies, observe the pipeline halt at the Validate stage, read the Conftest output, and remediate each violation. The pipeline shape extends to Source → Build → **Validate (OPA)** → Approval → Deploy.
+In **Lab 3: Policy-as-Code Evaluation & Failure Remediation**, you'll deploy a Terraform template that intentionally violates the OPA policies, observe the pipeline halt at the Validate stage, read the Conftest output, and remediate each violation. The pipeline shape extends to Source → Build → **Validate (OPA)** → Approval → Deploy.
 
 ---
 
