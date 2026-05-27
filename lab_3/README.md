@@ -1,4 +1,4 @@
-# Lab 3: Policy-as-Code Evaluation & Failure Remediation
+# Lab 3: Policy-as-Code Evaluation and Failure Remediation
 
 **Duration:** 45 minutes
 
