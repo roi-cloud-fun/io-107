@@ -1023,6 +1023,7 @@ resource "aws_codepipeline" "lab1" {
     }
   }
 
+
   stage {
     name = "Build"
     action {
@@ -1039,6 +1040,7 @@ resource "aws_codepipeline" "lab1" {
       }
     }
   }
+
 
   tags = merge(local.common_tags, { Lab = "lab1" })
 
@@ -1406,6 +1408,7 @@ resource "aws_codepipeline" "lab2" {
     }
   }
 
+
   stage {
     name = "Build"
     action {
@@ -1422,6 +1425,7 @@ resource "aws_codepipeline" "lab2" {
       }
     }
   }
+
 
   tags = merge(local.common_tags, { Lab = "lab2" })
 
@@ -1603,6 +1607,13 @@ resource "aws_codebuild_project" "lab3" {
       name  = "STUDENT_ID"
       value = var.student_id
     }
+    # Lab 3's Deploy stage runs `kubectl apply` against the per-student
+    # EKS cluster. EKS_CLUSTER_NAME tells the buildspec which cluster to
+    # update-kubeconfig against.
+    environment_variable {
+      name  = "EKS_CLUSTER_NAME"
+      value = aws_eks_cluster.training.name
+    }
   }
 
   source {
@@ -1649,6 +1660,7 @@ resource "aws_codepipeline" "lab3" {
     }
   }
 
+
   stage {
     name = "Build"
     action {
@@ -1665,6 +1677,7 @@ resource "aws_codepipeline" "lab3" {
       }
     }
   }
+
 
   tags = merge(local.common_tags, { Lab = "lab3" })
 
@@ -1906,6 +1919,7 @@ resource "aws_codepipeline" "lab4" {
     }
   }
 
+
   stage {
     name = "Build"
     action {
@@ -1922,6 +1936,7 @@ resource "aws_codepipeline" "lab4" {
       }
     }
   }
+
 
   tags = merge(local.common_tags, { Lab = "lab4" })
 

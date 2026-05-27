@@ -1,59 +1,98 @@
-version: 0.2
-
-# AWS CodeBuild spec for the Validate stage of the IO-107 Lab 3 pipeline.
+###############################################################################
+# IO-107 Lab 3 -- buildspec.yml
 #
-# Stages:
-#   install     -> install Terraform and Conftest binaries
-#   pre_build   -> terraform init
-#   build       -> terraform plan, convert to JSON, run Conftest against the
-#                  plan AND against the Kubernetes manifest directory
-#   post_build  -> (intentionally empty; Validate stage fails by design on the
-#                   broken state and is replaced by the Deploy stage's
-#                   buildspec on the next stage of the pipeline)
+# This ONE buildspec is invoked from THREE separate CodePipeline stages
+# (Build, Validate, Deploy). The pipeline overrides `LAB_PHASE` per stage:
+#
+#   Source   -> CodeCommit pulls the repo (no buildspec)
+#   Build    -> LAB_PHASE=plan      install + terraform init + plan -> tfplan(.json)
+#   Validate -> LAB_PHASE=validate  conftest test against the plan + K8s manifests
+#   Deploy   -> LAB_PHASE=deploy    terraform apply tfplan + kubectl apply
+#
+# This shape gives students the visual "Validate stage failed" experience
+# in the CodePipeline console (instead of a single Build stage's CodeBuild
+# log being the only place the policy-gate failure is visible).
+###############################################################################
+
+version: 0.2
 
 env:
   variables:
+    LAB_PHASE: "plan"          # overridden per-stage by the pipeline
     TERRAFORM_VERSION: "1.6.6"
     CONFTEST_VERSION: "0.46.0"
     AWS_REGION: "us-east-1"
+    # EKS_CLUSTER_NAME is set on the CodeBuild project by lab_env_student/
+    # so the Deploy phase can run `kubectl apply` against the per-student
+    # cluster.
 
 phases:
   install:
     commands:
+      - echo "LAB_PHASE = ${LAB_PHASE}"
       - echo "Installing Terraform ${TERRAFORM_VERSION}"
       - curl -sLo terraform.zip "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
       - unzip -o terraform.zip -d /usr/local/bin/
       - terraform version
-
       - echo "Installing Conftest ${CONFTEST_VERSION}"
       - curl -sLo conftest.tar.gz "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
       - tar -xzf conftest.tar.gz -C /usr/local/bin conftest
       - conftest --version
-
-  pre_build:
-    commands:
-      - echo "Initializing Terraform"
-      - cd terraform
-      - terraform init -backend=false -input=false
-      - cd ..
+      # Deploy phase needs kubectl + helm-installed CLI for K8s apply.
+      - |
+        if [ "$LAB_PHASE" = "deploy" ]; then
+          echo "Installing kubectl"
+          curl -sLo /usr/local/bin/kubectl https://amazon-eks.s3.us-west-2.amazonaws.com/1.29.0/2024-01-04/bin/linux/amd64/kubectl
+          chmod +x /usr/local/bin/kubectl
+          kubectl version --client
+        fi
 
   build:
     commands:
-      - echo "Generating Terraform plan"
-      - cd terraform
-      - terraform plan -input=false -out=tfplan
-      - terraform show -json tfplan > ../tfplan.json
-      - cd ..
-
-      - echo "Running Conftest against Terraform plan"
-      - conftest test tfplan.json
-
-      - echo "Running Conftest against Kubernetes manifests"
-      - conftest test kubernetes/
-
-  post_build:
-    commands:
-      - echo "Validate stage complete. If Conftest returned non-zero, the pipeline halts here by design."
+      - |
+        case "$LAB_PHASE" in
+          plan)
+            echo "===== Build / Plan phase ====="
+            cd terraform
+            terraform init -backend=false -input=false
+            terraform plan -input=false -no-color -out=tfplan
+            terraform show -json tfplan > ../tfplan.json
+            cd ..
+            echo "Plan artifact written to tfplan.json"
+            ;;
+          validate)
+            echo "===== Validate / OPA phase ====="
+            echo "Running Conftest against Terraform plan"
+            conftest test tfplan.json
+            echo
+            echo "Running Conftest against Kubernetes manifests"
+            conftest test kubernetes/
+            ;;
+          deploy)
+            echo "===== Deploy phase ====="
+            echo "Applying Terraform plan"
+            cd terraform
+            terraform init -backend=false -input=false
+            terraform apply -input=false -auto-approve tfplan
+            cd ..
+            echo
+            if [ -n "${EKS_CLUSTER_NAME}" ]; then
+              echo "Applying Kubernetes manifest"
+              aws eks update-kubeconfig --name "${EKS_CLUSTER_NAME}" --region "${AWS_REGION}"
+              # The remediated manifest declares namespace `lab3`; create it
+              # if it doesn't exist (idempotent).
+              kubectl create namespace lab3 --dry-run=client -o yaml | kubectl apply -f -
+              kubectl apply -f kubernetes/deployment.yaml
+              kubectl rollout status deployment/myapp -n lab3 --timeout=3m
+            else
+              echo "EKS_CLUSTER_NAME not set; skipping kubectl apply"
+            fi
+            ;;
+          *)
+            echo "Unknown LAB_PHASE: $LAB_PHASE -- expected plan / validate / deploy"
+            exit 1
+            ;;
+        esac
 
 artifacts:
   files:

@@ -220,9 +220,11 @@ echo "CodeCommit:  $LAB3_CODECOMMIT_CLONE_URL"
 
 10. Open the AWS CodePipeline console and find your pipeline (`$LAB3_PIPELINE_NAME`). Watch the stages execute.
 
-    **Expected Result:** AWS CodePipeline shows **Source** and **Build** as **Succeeded** (green), and **Validate** as **Failed** (red). The pipeline overall status is **Failed**, and no **Deploy** stage runs.
+    **Expected Result:** AWS CodePipeline shows four stages — **Source**, **Build**, **Validate**, **Deploy**. Source and Build succeed (green); Validate fails (red); Deploy does not run. The pipeline overall status is **Failed**.
 
-> **Note:** The pipeline runs OPA against the Terraform PLAN JSON, not the raw `.tf` source. The buildspec runs `terraform plan -out=tfplan` and `terraform show -json tfplan > tfplan.json`, then Conftest evaluates that plan output. The `tfplan.json` is generated at runtime and not checked into the repo.
+> **Note on the pipeline shape:** This pipeline has four stages. Build runs `terraform plan` and produces a `tfplan.json` artifact. Validate runs `conftest test tfplan.json` against that artifact — this is the policy gate. Deploy runs `terraform apply` + `kubectl apply` only if Validate passed. All three CodeBuild stages reuse the same CodeBuild project; the pipeline overrides a `LAB_PHASE` environment variable per stage so the buildspec runs the right phase.
+
+> **Note:** The pipeline runs OPA against the Terraform PLAN JSON, not the raw `.tf` source. The Build stage runs `terraform plan -out=tfplan` and `terraform show -json tfplan > tfplan.json`, passes them as artifacts to Validate, which runs Conftest against the plan output. The `tfplan.json` is generated at runtime and not checked into the repo.
 
 ---
 
@@ -405,19 +407,19 @@ echo "CodeCommit:  $LAB3_CODECOMMIT_CLONE_URL"
 
 20. Return to the CodePipeline console and watch the new execution.
 
-    **Expected Result:** CodePipeline shows **Source**, **Build**, and **Validate** all as **Succeeded** (green). The Validate stage that turned red on the previous run is now green.
+    **Expected Result:** CodePipeline shows all four stages — **Source**, **Build**, **Validate**, **Deploy** — as **Succeeded** (green). The Validate stage that turned red on the previous run is now green, and Deploy runs to completion.
 
 21. Click into the **Validate** stage's CodeBuild execution and confirm the Conftest summary now reports zero failures:
 
     ```
     Running policy validation...
 
-    Policy validation passed. Proceeding to deployment.
+    (no FAIL lines)
     ```
 
-22. Confirm the pipeline proceeds past Validate into Deploy (no approval gate for this lab, since the target is `dev`).
+22. Click into the **Deploy** stage's CodeBuild execution. Confirm `terraform apply tfplan` and `kubectl apply -f kubernetes/deployment.yaml` ran without error.
 
-    **Expected Result:** Overall pipeline status reads **Succeeded**, every stage tile is green, and the **Deploy** stage's CodeBuild log shows `terraform apply` and `kubectl apply -f kubernetes/deployment.yaml` ran without error. The `client-dev-lab3-data` S3 bucket and the `myapp` Deployment in namespace `lab3` now exist.
+    **Expected Result:** Overall pipeline status reads **Succeeded**, all four stage tiles green. The `client-dev-lab3-data` S3 bucket and the `myapp` Deployment in namespace `lab3` now exist.
 
 > **What Just Happened?** You took a deployment that was blocked by every policy denial Conftest could produce and made it deployable by changing only the resource definitions — never the policies themselves. That is the policy-as-code workflow: policies are the contract, the pipeline enforces them, and the human work is bringing the configuration into compliance.
 
@@ -432,7 +434,7 @@ Before finishing, confirm you have completed:
 - [ ] Terraform violations enumerated on paper before running the pipeline
 - [ ] Kubernetes violations enumerated on paper before running the pipeline
 - [ ] First pipeline run reached the **Validate** stage and failed
-- [ ] Conftest output located in the CodeBuild log for the Validate stage
+- [ ] Conftest output located in the Validate stage's CodeBuild log
 - [ ] Each `FAIL` line mapped back to its source rule and source file
 - [ ] S3 bucket renamed to match `client-{env}-{app}-{purpose}` pattern
 - [ ] Separate `aws_s3_bucket_server_side_encryption_configuration` resource added
@@ -455,7 +457,7 @@ Before finishing, confirm you have completed:
 | Re-run still shows S3 encryption failure | Validate stage red after remediation | You added an inline `server_side_encryption_configuration {}` block instead of a separate `aws_s3_bucket_server_side_encryption_configuration` resource. The inline form was removed from the AWS provider schema in v4.0. |
 | Lambda still flagged for missing tag | Conftest log shows tag-missing FAIL after you added the tag | Tag keys are case-sensitive. Confirm exact spelling: `Environment`, not `environment`. |
 | Container image policy still fails | "uses image from unapproved registry" after you changed it | Confirm the image string starts with a 12-digit account, then `.dkr.ecr.<region>.amazonaws.com/`. No `docker.io/` prefix. |
-| Deploy stage fails after Validate passes | Stage green but apply errors | Read the `terraform apply` / `kubectl apply` log; usually means a non-policy resource issue (IAM perms, network). |
+| Deploy stage fails after Validate passes | Deploy stage red but Validate was green | OPA gate passed; the actual apply hit a different problem (IAM perms, network, K8s namespace). Read the Deploy stage's CodeBuild log. |
 
 ---
 

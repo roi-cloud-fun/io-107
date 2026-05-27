@@ -6,12 +6,12 @@
 # Pipeline shape:
 #   Source -> Build (plan) -> Validate (OPA) -> Approval (manual) -> Deploy (apply)
 #
-# This buildspec runs in TWO CodeBuild projects in the pipeline:
-#   - Plan/Validate build (TF_PHASE=plan)  -> install, init, plan, conftest test
-#   - Apply build         (TF_PHASE=apply) -> CLI-driven Blue/Green if the target
-#                                              engine version differs from the
-#                                              live cluster, then terraform apply
-#                                              for everything else
+# This ONE buildspec is invoked from THREE CodePipeline stages. The pipeline
+# overrides `TF_PHASE` per stage:
+#   Build    -> TF_PHASE=plan      install, init, plan -> tfplan(.json)
+#   Validate -> TF_PHASE=validate  conftest test against the plan
+#   Approval -> (manual approval action; no CodeBuild invocation)
+#   Deploy   -> TF_PHASE=apply     CLI-driven Aurora Blue/Green + terraform apply
 #
 # Why CLI-driven Blue/Green?
 #   The Terraform AWS provider does not support `blue_green_update` on
@@ -60,11 +60,11 @@ phases:
   pre_build:
     commands:
       - echo "Phase = ${TF_PHASE}"
-      - cd terraform
-      - terraform init -input=false -no-color
       - |
         if [ "${TF_PHASE}" = "plan" ]; then
-          echo "Running terraform plan"
+          echo "===== Build / Plan phase ====="
+          cd terraform
+          terraform init -input=false -no-color
           terraform plan -input=false -no-color -out=tfplan
           terraform show -json tfplan > tfplan.json
         fi
@@ -72,9 +72,8 @@ phases:
   build:
     commands:
       - |
-        if [ "${TF_PHASE}" = "plan" ]; then
-          echo "Validating plan with Conftest / OPA"
-          cd ..
+        if [ "${TF_PHASE}" = "validate" ]; then
+          echo "===== Validate / OPA phase ====="
           conftest test terraform/tfplan.json -p policies/ --no-color
         fi
 
