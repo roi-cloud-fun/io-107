@@ -697,27 +697,15 @@ resource "aws_iam_role_policy" "codebuild_service" {
           "cloudformation:ExecuteChangeSet",
           "cloudformation:DeleteChangeSet",
           "cloudformation:ValidateTemplate",
-          "lambda:CreateFunction",
-          "lambda:UpdateFunctionCode",
-          "lambda:UpdateFunctionConfiguration",
-          "lambda:DeleteFunction",
-          "lambda:GetFunction",
-          "lambda:GetFunctionConfiguration",
-          "lambda:ListFunctions",
-          "lambda:AddPermission",
-          "lambda:RemovePermission",
-          "lambda:TagResource",
-          "lambda:UntagResource",
-          "lambda:PublishVersion",
-          "lambda:CreateAlias",
-          "lambda:UpdateAlias",
-          "lambda:DeleteAlias",
-          "lambda:GetAlias",
-          "apigateway:GET",
-          "apigateway:POST",
-          "apigateway:PUT",
-          "apigateway:PATCH",
-          "apigateway:DELETE",
+          # Lambda + API Gateway: SAM creates these from the template. We
+          # were originally enumerating individual actions but kept hitting
+          # missing-permission errors (lambda:ListVersionsByFunction needed
+          # by AutoPublishAlias's version-bump logic was the latest). For a
+          # sandbox lab account, lambda:* / apigateway:* is fine -- the
+          # whole policy is already on Resource="*" so the granular list
+          # provided no security value, just maintenance burden.
+          "lambda:*",
+          "apigateway:*",
           "iam:CreateRole",
           "iam:DeleteRole",
           "iam:GetRole",
@@ -730,25 +718,11 @@ resource "aws_iam_role_policy" "codebuild_service" {
           "iam:TagRole",
           "iam:UntagRole",
           # SAM's AutoPublishAlias + DeploymentPreference (Canary10Percent5Minutes)
-          # provisions an AWS::CodeDeploy::Application + DeploymentGroup as part
-          # of the CFN stack. CodeBuild needs these to drive CFN through that.
-          # Scoped to "*" because the resource ARNs include CFN-generated suffixes
-          # only known at deploy time. Acceptable for a lab account.
-          "codedeploy:CreateApplication",
-          "codedeploy:DeleteApplication",
-          "codedeploy:GetApplication",
-          "codedeploy:UpdateApplication",
-          "codedeploy:CreateDeploymentGroup",
-          "codedeploy:DeleteDeploymentGroup",
-          "codedeploy:GetDeploymentGroup",
-          "codedeploy:UpdateDeploymentGroup",
-          "codedeploy:CreateDeployment",
-          "codedeploy:GetDeployment",
-          "codedeploy:GetDeploymentConfig",
-          "codedeploy:RegisterApplicationRevision",
-          "codedeploy:TagResource",
-          "codedeploy:UntagResource",
-          "codedeploy:ListTagsForResource",
+          # provisions an AWS::CodeDeploy::Application + DeploymentGroup as
+          # part of the CFN stack. codedeploy:* for the same reason as
+          # lambda:* above -- sandbox account, granular list adds maintenance
+          # burden without security benefit since Resource="*".
+          "codedeploy:*",
           # SAM's DeploymentPreference references an ApiErrorAlarm
           # (AWS::CloudWatch::Alarm). The CFN stack creates that alarm.
           "cloudwatch:PutMetricAlarm",
