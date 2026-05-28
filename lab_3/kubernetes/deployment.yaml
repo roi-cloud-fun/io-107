@@ -9,13 +9,18 @@
 #              (`docker.io`). Only images from an Amazon ECR registry are
 #              permitted. The approved pattern (per policies/eks.rego):
 #                <account-id>.dkr.ecr.<region>.amazonaws.com/<repo>:<tag>
+#              OR `public.ecr.aws/<path>:<tag>` (see eks.rego for both).
 # VIOLATION 8: Container `myapp` is missing `resources.limits` — both
 #              `memory` and `cpu` limits are required.
+#
+# NOTE: metadata.namespace is intentionally omitted. The pipeline's Deploy
+# phase sets the namespace at apply time via `kubectl apply -n lab3`,
+# matching the namespace it creates with `kubectl create namespace lab3`.
+# Hardcoding `namespace:` here would conflict with that flag.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: myapp
-  namespace: default
   labels:
     app: myapp
 spec:
