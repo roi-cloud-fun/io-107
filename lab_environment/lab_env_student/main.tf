@@ -184,9 +184,9 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = merge(local.common_tags, {
-    Name                                             = "${local.name_prefix}-public-${local.azs[count.index]}"
-    "kubernetes.io/role/elb"                         = "1"
-    "kubernetes.io/cluster/${local.name_prefix}-eks" = "shared"
+    Name                                                  = "${local.name_prefix}-public-${local.azs[count.index]}"
+    "kubernetes.io/role/elb"                              = "1"
+    "kubernetes.io/cluster/${local.name_prefix}-eks"      = "shared"
   })
 }
 
@@ -197,9 +197,9 @@ resource "aws_subnet" "private" {
   availability_zone = local.azs[count.index]
 
   tags = merge(local.common_tags, {
-    Name                                             = "${local.name_prefix}-private-${local.azs[count.index]}"
-    "kubernetes.io/role/internal-elb"                = "1"
-    "kubernetes.io/cluster/${local.name_prefix}-eks" = "shared"
+    Name                                                  = "${local.name_prefix}-private-${local.azs[count.index]}"
+    "kubernetes.io/role/internal-elb"                     = "1"
+    "kubernetes.io/cluster/${local.name_prefix}-eks"      = "shared"
   })
 }
 
@@ -656,8 +656,8 @@ resource "aws_iam_role_policy" "codebuild_service" {
         Resource = "*"
       },
       {
-        Effect   = "Allow"
-        Action   = ["iam:PassRole"]
+        Effect = "Allow"
+        Action = ["iam:PassRole"]
         Resource = "*"
         Condition = {
           StringLike = {
@@ -1695,7 +1695,7 @@ resource "aws_codepipeline" "lab3" {
       output_artifacts = ["build_output"]
 
       configuration = {
-        ProjectName = aws_codebuild_project.lab3[0].name
+        ProjectName          = aws_codebuild_project.lab3[0].name
         EnvironmentVariables = jsonencode([
           {
             name  = "LAB_PHASE"
@@ -1718,7 +1718,7 @@ resource "aws_codepipeline" "lab3" {
       input_artifacts = ["build_output"]
 
       configuration = {
-        ProjectName = aws_codebuild_project.lab3[0].name
+        ProjectName          = aws_codebuild_project.lab3[0].name
         EnvironmentVariables = jsonencode([
           {
             name  = "LAB_PHASE"
@@ -1741,7 +1741,7 @@ resource "aws_codepipeline" "lab3" {
       input_artifacts = ["build_output"]
 
       configuration = {
-        ProjectName = aws_codebuild_project.lab3[0].name
+        ProjectName          = aws_codebuild_project.lab3[0].name
         EnvironmentVariables = jsonencode([
           {
             name  = "LAB_PHASE"
@@ -1948,6 +1948,15 @@ resource "aws_codebuild_project" "lab4" {
       name  = "TF_VAR_cluster_identifier"
       value = aws_rds_cluster.lab4_aurora[0].id
     }
+    # Lab 4's Terraform uses an S3 backend (partial config -- bucket / region
+    # supplied at `terraform init` time by the buildspec). Same pattern as
+    # Lab 3: per-student artifact bucket holds the state, key namespaced
+    # under `lab4/terraform.tfstate`. `use_lockfile = true` is Terraform
+    # 1.10+ native S3 locking -- no DynamoDB lock table needed.
+    environment_variable {
+      name  = "ARTIFACT_BUCKET"
+      value = aws_s3_bucket.lab4_artifacts[0].bucket
+    }
   }
 
   source {
@@ -2017,7 +2026,7 @@ resource "aws_codepipeline" "lab4" {
       output_artifacts = ["build_output"]
 
       configuration = {
-        ProjectName = aws_codebuild_project.lab4[0].name
+        ProjectName          = aws_codebuild_project.lab4[0].name
         EnvironmentVariables = jsonencode([
           {
             name  = "TF_PHASE"
@@ -2040,7 +2049,7 @@ resource "aws_codepipeline" "lab4" {
       input_artifacts = ["build_output"]
 
       configuration = {
-        ProjectName = aws_codebuild_project.lab4[0].name
+        ProjectName          = aws_codebuild_project.lab4[0].name
         EnvironmentVariables = jsonencode([
           {
             name  = "TF_PHASE"
@@ -2078,7 +2087,7 @@ resource "aws_codepipeline" "lab4" {
       input_artifacts = ["build_output"]
 
       configuration = {
-        ProjectName = aws_codebuild_project.lab4[0].name
+        ProjectName          = aws_codebuild_project.lab4[0].name
         EnvironmentVariables = jsonencode([
           {
             name  = "TF_PHASE"
@@ -2140,18 +2149,72 @@ resource "aws_cloudwatch_event_target" "lab4_trigger" {
 
 
 
+# Custom DB cluster parameter group required for Aurora PostgreSQL
+# Blue/Green Deployments. The default param group does NOT enable logical
+# replication, so `aws rds create-blue-green-deployment` fails with a
+# parameter-group prerequisite error if the cluster uses the default.
+#
+# Static parameters (logical_replication, max_replication_slots, etc.)
+# require a reboot to take effect — but because we attach this parameter
+# group at CREATION time (not as a later modification), no manual reboot
+# is needed; the cluster comes up with these settings already active.
+#
+# Refs:
+#   - https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/blue-green-deployments-creating.html#blue-green-deployments-creating-preparing-postgres
+#   - https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Replication.Logical.Configure.html
+resource "aws_rds_cluster_parameter_group" "lab4_aurora_bg" {
+  count = var.enable_lab4 ? 1 : 0
+
+  name        = "${local.name_prefix}-lab4-aurora-pg16-bg"
+  family      = "aurora-postgresql16"
+  description = "Aurora PostgreSQL 16 cluster params with logical_replication enabled for Blue/Green Deployments"
+
+  parameter {
+    name         = "rds.logical_replication"
+    value        = "1"
+    apply_method = "pending-reboot"
+  }
+
+  parameter {
+    name         = "synchronous_commit"
+    value        = "on"
+    apply_method = "immediate"
+  }
+
+  parameter {
+    name         = "max_replication_slots"
+    value        = "10"
+    apply_method = "pending-reboot"
+  }
+
+  parameter {
+    name         = "max_logical_replication_workers"
+    value        = "4"
+    apply_method = "pending-reboot"
+  }
+
+  parameter {
+    name         = "max_worker_processes"
+    value        = "8"
+    apply_method = "pending-reboot"
+  }
+
+  tags = merge(local.common_tags, { Lab = "lab4" })
+}
+
 resource "aws_rds_cluster" "lab4_aurora" {
   count = var.enable_lab4 ? 1 : 0
 
   cluster_identifier          = "${local.name_prefix}-lab4-aurora"
   engine                      = "aurora-postgresql"
-  engine_version              = "16.11" # Lab 4 bumps this via Blue/Green; 16.13 is the target
+  engine_version              = "16.11"  # Lab 4 bumps this via Blue/Green; 16.13 is the target
   database_name               = "training"
   master_username             = "training_admin"
   manage_master_user_password = true
 
-  db_subnet_group_name   = aws_db_subnet_group.training.name
-  vpc_security_group_ids = [aws_security_group.training_db.id]
+  db_subnet_group_name            = aws_db_subnet_group.training.name
+  vpc_security_group_ids          = [aws_security_group.training_db.id]
+  db_cluster_parameter_group_name = aws_rds_cluster_parameter_group.lab4_aurora_bg[0].name
 
   storage_encrypted = true
   kms_key_id        = aws_kms_key.training_rds.arn
