@@ -634,14 +634,15 @@ resource "aws_iam_role_policy" "codebuild_service" {
           "ecr:CompleteLayerUpload",
           "eks:DescribeCluster",
           "eks:AccessKubernetesApi",
-          "rds:DescribeDBClusters",
-          "rds:DescribeDBInstances",
-          "rds:ModifyDBCluster",
-          "rds:CreateBlueGreenDeployment",
-          "rds:DescribeBlueGreenDeployments",
-          "rds:SwitchoverBlueGreenDeployment",
-          "rds:DeleteBlueGreenDeployment",
-          "rds:AddTagsToResource",
+          # RDS broadened to rds:* because Lab 4's Aurora Blue/Green flow
+          # internally calls CreateDBCluster, CreateDBInstance,
+          # ModifyDBClusterParameterGroup, DeleteDBCluster (cleanup), etc.
+          # in addition to the orchestration calls (CreateBlueGreenDeployment,
+          # SwitchoverBlueGreenDeployment). Enumerating each one yields a
+          # whack-a-mole of AccessDenied errors. Same rationale as s3:* /
+          # lambda:* / codedeploy:* / apigateway:* above: lab sandbox
+          # account, NOT acceptable in production.
+          "rds:*",
           "secretsmanager:GetSecretValue",
           "kms:Decrypt",
           "kms:GenerateDataKey",
