@@ -15,12 +15,23 @@
 #
 # Why CLI-driven Blue/Green?
 #   The Terraform AWS provider does not support `blue_green_update` on
-#   `aws_rds_cluster` (Aurora). To preserve the Blue/Green upgrade path on
-#   Aurora, the cluster's `engine_version` carries `lifecycle.ignore_changes`
-#   in Terraform, and this buildspec drives the AWS RDS API directly via
+#   `aws_rds_cluster` (Aurora) -- it is only available on `aws_db_instance`.
+#   This is an explicit design decision documented at
+#   https://hashicorp.github.io/terraform-provider-aws/design-decisions/rds-bluegreen-deployments/
+#   To preserve the Blue/Green upgrade path on Aurora, the cluster's
+#   `engine_version` carries `lifecycle.ignore_changes` in Terraform, and
+#   this buildspec drives the AWS RDS API directly via
 #   `aws rds create-blue-green-deployment` + `switchover-blue-green-deployment`.
 #   The `terraform_data.engine_version_target` resource surfaces the target
 #   version to OPA so the policy gate still fires before approval.
+#
+# Why `set -e` inside each heredoc:
+#   CodeBuild runs each entry in `commands:` as a separate shell invocation.
+#   A `- set -e` declared as its own command does NOT carry into the next
+#   heredoc -- it must be the first line inside the heredoc itself for the
+#   case/if blocks to fail-fast on the first error. Without it, a failed
+#   `terraform plan` would let a downstream `terraform show` or
+#   `aws rds create-blue-green-deployment` run against broken/missing state.
 ###############################################################################
 
 version: 0.2
@@ -61,6 +72,7 @@ phases:
     commands:
       - echo "Phase = ${TF_PHASE}"
       - |
+        set -e
         if [ "${TF_PHASE}" = "plan" ]; then
           echo "===== Build / Plan phase ====="
           cd terraform
@@ -72,6 +84,7 @@ phases:
   build:
     commands:
       - |
+        set -e
         if [ "${TF_PHASE}" = "validate" ]; then
           echo "===== Validate / OPA phase ====="
           conftest test terraform/tfplan.json -p policies/ --no-color
@@ -80,6 +93,7 @@ phases:
   post_build:
     commands:
       - |
+        set -e
         if [ "${TF_PHASE}" = "apply" ]; then
           echo "===== Apply phase ====="
 
