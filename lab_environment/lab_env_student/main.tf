@@ -644,8 +644,16 @@ resource "aws_iam_role_policy" "codebuild_service" {
           # account, NOT acceptable in production.
           "rds:*",
           "secretsmanager:GetSecretValue",
-          "kms:Decrypt",
-          "kms:GenerateDataKey",
+          # KMS broadened to kms:* because Lab 4's Aurora Blue/Green flow
+          # internally calls kms:CreateGrant on the cluster's encryption key
+          # so RDS can encrypt the green cluster's volume. The narrow
+          # Decrypt/GenerateDataKey set fails with InvalidConfiguration:
+          # "the specified KMS key ... the current user or role doesn't have
+          # permissions to access it." Same rationale as rds:* / s3:* / etc.:
+          # lab sandbox account only, NOT production. The keys themselves
+          # use default key policies so the root account already permits
+          # full use; this just unblocks the calling principal.
+          "kms:*",
           "sts:GetCallerIdentity",
           # S3 -- broad in this sandbox account because Lab 2 (SAM artifact
           # bucket reads/writes) and Lab 3 (terraform apply that CREATES an
