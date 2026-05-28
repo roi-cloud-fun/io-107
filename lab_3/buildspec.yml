@@ -49,6 +49,10 @@ phases:
 
   build:
     commands:
+      # set -e so a failing terraform apply / kubectl step aborts the stage
+      # immediately instead of letting subsequent kubectl commands run
+      # against half-deployed infra.
+      - set -e
       - |
         case "$LAB_PHASE" in
           plan)
@@ -86,7 +90,12 @@ phases:
               # The remediated manifest declares namespace `lab3`; create it
               # if it doesn't exist (idempotent).
               kubectl create namespace lab3 --dry-run=client -o yaml | kubectl apply -f -
-              kubectl apply -f kubernetes/deployment.yaml
+              # `-n lab3` forces the deployment into the lab3 namespace even
+              # if the student's manifest is missing metadata.namespace. The
+              # rollout-status check below also targets lab3, so without this
+              # flag the deployment would land in `default` and rollout-status
+              # would fail with NotFound.
+              kubectl apply -f kubernetes/deployment.yaml -n lab3
               kubectl rollout status deployment/myapp -n lab3 --timeout=3m
             else
               echo "EKS_CLUSTER_NAME not set; skipping kubectl apply"

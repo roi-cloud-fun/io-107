@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.4"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.5"
+    }
   }
 
   # Partial backend config -- bucket / region are passed at `terraform init`
@@ -27,6 +31,21 @@ terraform {
 
 provider "aws" {
   region = "us-east-1"
+}
+
+# Per-student suffix for plumbing resource names. The training account is
+# shared across multiple students, so any hardcoded name (IAM role, Lambda
+# function, etc.) would collide. State is per-student (per-student artifact
+# bucket + lab3/terraform.tfstate key), so this random_string is generated
+# once per student and stays stable across that student's plan/apply cycles.
+# The OPA policies do NOT inspect IAM role or Lambda function names -- this
+# is invisible to the policy gate. The S3 bucket name is left for the
+# student to remediate manually since that IS the teaching target.
+resource "random_string" "suffix" {
+  length  = 5
+  special = false
+  upper   = false
+  numeric = true
 }
 
 # The Lambda zip is built from src/app.py at plan time so the lab works
@@ -71,7 +90,8 @@ resource "aws_s3_bucket" "data_bucket" {
 # Lambda execution role. NOT a teaching target -- the policies in ../policies/
 # evaluate the Lambda function itself (timeout, tags), not the execution role.
 # We create a real role here so `terraform apply` succeeds once the policy
-# violations on the function are fixed.
+# violations on the function are fixed. The random suffix prevents collisions
+# across students sharing the training account.
 data "aws_iam_policy_document" "lambda_assume" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -83,7 +103,7 @@ data "aws_iam_policy_document" "lambda_assume" {
 }
 
 resource "aws_iam_role" "lambda_exec" {
-  name               = "lab3-lambda-exec"
+  name               = "lab3-lambda-exec-${random_string.suffix.result}"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
@@ -100,7 +120,7 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
 #   Policy:  policies/tagging.rego
 #   Same four mandatory tags as above.
 resource "aws_lambda_function" "processor" {
-  function_name    = "data-processor"
+  function_name    = "data-processor-${random_string.suffix.result}"
   runtime          = "python3.11"
   handler          = "app.handler"
   timeout          = 600
