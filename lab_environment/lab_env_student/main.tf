@@ -1616,6 +1616,16 @@ resource "aws_codebuild_project" "lab3" {
       name  = "EKS_CLUSTER_NAME"
       value = aws_eks_cluster.training.name
     }
+    # Lab 3's Terraform uses an S3 backend so state persists across
+    # pipeline runs (without this, each run starts from empty state and
+    # collides with the previous run's already-created IAM role / Lambda).
+    # ARTIFACT_BUCKET also doubles as the SAM artifact bucket pattern --
+    # using the per-student lab3 artifact bucket. The buildspec passes
+    # this to `terraform init -backend-config="bucket=${ARTIFACT_BUCKET}"`.
+    environment_variable {
+      name  = "ARTIFACT_BUCKET"
+      value = aws_s3_bucket.lab3_artifacts[0].bucket
+    }
   }
 
   source {

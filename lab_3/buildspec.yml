@@ -54,7 +54,9 @@ phases:
           plan)
             echo "===== Build / Plan phase ====="
             cd terraform
-            terraform init -backend=false -input=false
+            terraform init -input=false \
+              -backend-config="bucket=${ARTIFACT_BUCKET}" \
+              -backend-config="region=${AWS_REGION}"
             terraform plan -input=false -no-color -out=tfplan
             terraform show -json tfplan > ../tfplan.json
             cd ..
@@ -72,7 +74,9 @@ phases:
             echo "===== Deploy phase ====="
             echo "Applying Terraform plan"
             cd terraform
-            terraform init -backend=false -input=false
+            terraform init -input=false \
+              -backend-config="bucket=${ARTIFACT_BUCKET}" \
+              -backend-config="region=${AWS_REGION}"
             terraform apply -input=false -auto-approve tfplan
             cd ..
             echo

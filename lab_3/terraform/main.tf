@@ -11,6 +11,18 @@ terraform {
       version = "~> 2.4"
     }
   }
+
+  # Partial backend config -- bucket / region are passed at `terraform init`
+  # time by the buildspec via `-backend-config=...` flags. Keeping the key
+  # static here so the same state file is used across every pipeline run,
+  # so the second run sees the first run's resources and doesn't try to
+  # recreate them. `use_lockfile = true` is Terraform 1.10+ native S3 locking
+  # -- no separate DynamoDB lock table needed.
+  backend "s3" {
+    key          = "lab3/terraform.tfstate"
+    use_lockfile = true
+    encrypt      = true
+  }
 }
 
 provider "aws" {
