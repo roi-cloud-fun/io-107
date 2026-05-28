@@ -13,11 +13,19 @@ package main
 
 import future.keywords.in
 
-# Match any Amazon ECR registry hostname: <account-id>.dkr.ecr.<region>.amazonaws.com
-# The policy enforces "image must come from ECR (not Docker Hub, not GHCR, not a
-# random registry)" -- it does NOT pin to a specific account, because each
-# student has their own account and the lab fixtures must work in any of them.
-approved_registry_regex := `^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/`
+# Approved registries (the policy enforces "image must come from an
+# AWS-hosted registry, not Docker Hub / GHCR / random registries"):
+#   1. Per-account Amazon ECR: <account-id>.dkr.ecr.<region>.amazonaws.com
+#      Used when students push their own images (e.g. Lab 1's myapp).
+#   2. Amazon ECR Public Gallery: public.ecr.aws/*
+#      AWS's public mirror of common images (nginx, python, node, etc.).
+#      Anonymous-pull, no auth needed, no rate limits. Used as a substitute
+#      for Docker Hub when no per-account image exists for the workload.
+#
+# The first regex does NOT pin to a specific account -- each student has
+# their own account and the lab fixtures must work in any of them.
+approved_ecr_private_regex := `^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/`
+approved_ecr_public_regex  := `^public\.ecr\.aws/`
 
 required_deployment_labels := ["environment", "owner"]
 
@@ -39,10 +47,11 @@ deny[msg] {
 deny[msg] {
 	input.kind == "Deployment"
 	container := input.spec.template.spec.containers[_]
-	not regex.match(approved_registry_regex, container.image)
+	not regex.match(approved_ecr_private_regex, container.image)
+	not regex.match(approved_ecr_public_regex, container.image)
 
 	msg := sprintf(
-		"Container '%s' uses image from unapproved registry '%s'",
+		"Container '%s' uses image from unapproved registry '%s' (allowed: per-account ECR or public.ecr.aws)",
 		[container.name, image_registry(container.image)],
 	)
 }
