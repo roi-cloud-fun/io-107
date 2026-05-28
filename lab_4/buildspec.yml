@@ -76,7 +76,9 @@ phases:
         if [ "${TF_PHASE}" = "plan" ]; then
           echo "===== Build / Plan phase ====="
           cd terraform
-          terraform init -input=false -no-color
+          terraform init -input=false -no-color \
+            -backend-config="bucket=${ARTIFACT_BUCKET}" \
+            -backend-config="region=${AWS_REGION}"
           terraform plan -input=false -no-color -out=tfplan
           terraform show -json tfplan > tfplan.json
         fi
