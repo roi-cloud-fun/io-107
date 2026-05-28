@@ -274,13 +274,18 @@ echo "CodeCommit:  $LAB3_CODECOMMIT_CLONE_URL"
 
 ### Task 6: Fix the Terraform File
 
-14. Edit `terraform/main.tf`. Leave the execution role + assume-role policy doc + role-policy attachment as-is. Edit the `aws_s3_bucket`, add the missing `aws_s3_bucket_server_side_encryption_configuration`, and fix the `aws_lambda_function`:
+14. Edit `terraform/main.tf`. Leave the execution role + assume-role policy doc + role-policy attachment as-is. Edit the `aws_s3_bucket`, add the missing `aws_s3_bucket_server_side_encryption_configuration`, and fix the `aws_lambda_function`.
+
+    > **Bucket name uniqueness:** S3 bucket names are globally unique across all AWS accounts. The policy regex (`policies/naming.rego`) is `^client-(dev|stg|prd)-[a-z0-9]+-[a-z0-9-]+$` — `client-`, then env, then app (letters + digits), then purpose (letters + digits + hyphens). Use the `purpose` segment for your unique identifier: your student ID, initials, or anything that distinguishes your bucket from your classmates'.
+
+    Replace `<your-id>` below with something unique (e.g. `alice`, `bob`, `student-07`). Don't use `client-dev-lab3-data` literally — your classmate just claimed it.
 
     ```hcl
     # FIXED: Bucket name matches client-{env}-{app}-{purpose}
+    #        Replace <your-id> with your unique student identifier.
     # FIXED: Required tags added
     resource "aws_s3_bucket" "data_bucket" {
-      bucket = "client-dev-lab3-data"
+      bucket = "client-dev-lab3-<your-id>"
 
       tags = {
         Environment = "dev"
@@ -419,7 +424,7 @@ echo "CodeCommit:  $LAB3_CODECOMMIT_CLONE_URL"
 
 22. Click into the **Deploy** stage's CodeBuild execution. Confirm `terraform apply tfplan` and `kubectl apply -f kubernetes/deployment.yaml` ran without error.
 
-    **Expected Result:** Overall pipeline status reads **Succeeded**, all four stage tiles green. The `client-dev-lab3-data` S3 bucket and the `myapp` Deployment in namespace `lab3` now exist.
+    **Expected Result:** Overall pipeline status reads **Succeeded**, all four stage tiles green. Your `client-dev-lab3-<your-id>` S3 bucket and the `myapp` Deployment in namespace `lab3` now exist.
 
 > **What Just Happened?** You took a deployment that was blocked by every policy denial Conftest could produce and made it deployable by changing only the resource definitions — never the policies themselves. That is the policy-as-code workflow: policies are the contract, the pipeline enforces them, and the human work is bringing the configuration into compliance.
 

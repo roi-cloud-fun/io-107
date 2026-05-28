@@ -2,15 +2,16 @@
 #
 # Required pattern: client-{env}-{app}-{purpose}
 #   env     in (dev, stg, prd)
-#   app     lowercase letters
-#   purpose lowercase letters, digits, hyphens
+#   app     lowercase letters and digits (e.g. lab3, myapp, billing2)
+#   purpose lowercase letters, digits, hyphens (e.g. data, alice, my-team)
 #
 # Example of a compliant name: client-dev-lab3-data
+# Example with a per-student suffix: client-dev-lab3-alice
 package main
 
 import future.keywords.in
 
-bucket_name_pattern := `^client-(dev|stg|prd)-[a-z]+-[a-z0-9-]+$`
+bucket_name_pattern := `^client-(dev|stg|prd)-[a-z0-9]+-[a-z0-9-]+$`
 
 deny[msg] {
 	change := input.resource_changes[_]
