@@ -646,10 +646,12 @@ resource "aws_iam_role_policy" "codebuild_service" {
           "kms:Decrypt",
           "kms:GenerateDataKey",
           "sts:GetCallerIdentity",
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:GetBucketLocation",
-          "s3:ListBucket"
+          # S3 -- broad in this sandbox account because Lab 2 (SAM artifact
+          # bucket reads/writes) and Lab 3 (terraform apply that CREATES an
+          # S3 bucket and configures its versioning + encryption + tags)
+          # both need a wider surface than the original read-only set.
+          # Same rationale as lambda:* / codedeploy:* / apigateway:* above.
+          "s3:*"
         ]
         Resource = "*"
       },
