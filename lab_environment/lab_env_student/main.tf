@@ -2203,15 +2203,29 @@ resource "aws_rds_cluster_parameter_group" "lab4_aurora_bg" {
   tags = merge(local.common_tags, { Lab = "lab4" })
 }
 
+resource "random_password" "lab4_aurora_master" {
+  count = var.enable_lab4 ? 1 : 0
+
+  length  = 24
+  special = false
+}
+
 resource "aws_rds_cluster" "lab4_aurora" {
   count = var.enable_lab4 ? 1 : 0
 
-  cluster_identifier          = "${local.name_prefix}-lab4-aurora"
-  engine                      = "aurora-postgresql"
-  engine_version              = "16.11"  # Lab 4 bumps this via Blue/Green; 16.13 is the target
-  database_name               = "training"
-  master_username             = "training_admin"
-  manage_master_user_password = true
+  cluster_identifier = "${local.name_prefix}-lab4-aurora"
+  engine             = "aurora-postgresql"
+  engine_version     = "16.11" # Lab 4 bumps this via Blue/Green; 16.13 is the target
+  database_name      = "training"
+  master_username    = "training_admin"
+  # manage_master_user_password = true is INCOMPATIBLE with Blue/Green
+  # Deployments per
+  # https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/blue-green-deployments-considerations.html#blue-green-deployments-limitations-general
+  # ("Blue/green deployments don't support managing master user passwords
+  # with AWS Secrets Manager"). Generate a password directly instead --
+  # Lab 4 doesn't require students to log into the database; only the
+  # engine version upgrade flow is exercised.
+  master_password = random_password.lab4_aurora_master[0].result
 
   db_subnet_group_name            = aws_db_subnet_group.training.name
   vpc_security_group_ids          = [aws_security_group.training_db.id]
