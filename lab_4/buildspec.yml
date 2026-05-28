@@ -134,6 +134,23 @@ phases:
             #   PROVISIONING, AVAILABLE, SWITCHOVER_IN_PROGRESS,
             #   SWITCHOVER_COMPLETED, INVALID_CONFIGURATION,
             #   SWITCHOVER_FAILED, DELETING
+            # Helper: dump full status + StatusDetails + last few events
+            # before exiting on failure. Without this, the BG deployment can
+            # get auto-cleaned by RDS before the operator can inspect why it
+            # went Invalid Configuration, leaving no trace of the cause.
+            bg_dump_and_fail() {
+              local reason="$1"
+              echo
+              echo "==== Blue/Green deployment failed: ${reason} ===="
+              aws rds describe-blue-green-deployments \
+                --blue-green-deployment-identifier "${BG_ID}" \
+                --region "${AWS_REGION}" \
+                --query 'BlueGreenDeployments[0].{Status:Status,StatusDetails:StatusDetails,Source:Source,Target:Target,SwitchoverDetails:SwitchoverDetails,Tasks:Tasks}' \
+                --output json || echo "(describe failed -- deployment may already be gone)"
+              echo "==== end of Blue/Green failure dump ===="
+              exit 1
+            }
+
             echo "Waiting for green cluster to be available (typically 5-15 min)..."
             while true; do
               BG_STATUS=$(aws rds describe-blue-green-deployments \
@@ -145,8 +162,8 @@ phases:
                 AVAILABLE)             break ;;
                 PROVISIONING)          sleep 30 ;;
                 INVALID_CONFIGURATION|SWITCHOVER_FAILED|DELETING)
-                                       echo "Blue/Green provisioning failed: ${BG_STATUS}"; exit 1 ;;
-                *)                     echo "Unexpected status: ${BG_STATUS}"; exit 1 ;;
+                                       bg_dump_and_fail "${BG_STATUS}" ;;
+                *)                     bg_dump_and_fail "unexpected status ${BG_STATUS}" ;;
               esac
             done
 
@@ -166,8 +183,8 @@ phases:
                 SWITCHOVER_COMPLETED)  break ;;
                 SWITCHOVER_IN_PROGRESS|AVAILABLE) sleep 20 ;;
                 SWITCHOVER_FAILED|INVALID_CONFIGURATION|DELETING)
-                                       echo "Switchover failed: ${BG_STATUS}"; exit 1 ;;
-                *)                     echo "Unexpected status: ${BG_STATUS}"; exit 1 ;;
+                                       bg_dump_and_fail "${BG_STATUS}" ;;
+                *)                     bg_dump_and_fail "unexpected status ${BG_STATUS}" ;;
               esac
             done
 
