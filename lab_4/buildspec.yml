@@ -125,10 +125,30 @@ phases:
               --query 'BlueGreenDeployment.BlueGreenDeploymentIdentifier' --output text)
 
             echo "Created Blue/Green deployment: ${BG_ID}"
-            echo "Waiting for green cluster to be available (typically 5–15 min)..."
-            aws rds wait blue-green-deployment-available \
-              --blue-green-deployment-identifier "${BG_ID}" \
-              --region "${AWS_REGION}"
+
+            # AWS CLI does NOT ship native waiters for blue/green deployments
+            # (no `aws rds wait blue-green-deployment-available` or
+            # `blue-green-deployment-switchover-completed`). Poll the Status
+            # field on describe-blue-green-deployments instead. Valid statuses
+            # per the RDS API reference:
+            #   PROVISIONING, AVAILABLE, SWITCHOVER_IN_PROGRESS,
+            #   SWITCHOVER_COMPLETED, INVALID_CONFIGURATION,
+            #   SWITCHOVER_FAILED, DELETING
+            echo "Waiting for green cluster to be available (typically 5-15 min)..."
+            while true; do
+              BG_STATUS=$(aws rds describe-blue-green-deployments \
+                --blue-green-deployment-identifier "${BG_ID}" \
+                --region "${AWS_REGION}" \
+                --query 'BlueGreenDeployments[0].Status' --output text)
+              echo "  status: ${BG_STATUS}"
+              case "${BG_STATUS}" in
+                AVAILABLE)             break ;;
+                PROVISIONING)          sleep 30 ;;
+                INVALID_CONFIGURATION|SWITCHOVER_FAILED|DELETING)
+                                       echo "Blue/Green provisioning failed: ${BG_STATUS}"; exit 1 ;;
+                *)                     echo "Unexpected status: ${BG_STATUS}"; exit 1 ;;
+              esac
+            done
 
             echo "Green cluster ready. Initiating switchover..."
             aws rds switchover-blue-green-deployment \
@@ -136,9 +156,20 @@ phases:
               --region "${AWS_REGION}"
 
             echo "Waiting for switchover to complete..."
-            aws rds wait blue-green-deployment-switchover-completed \
-              --blue-green-deployment-identifier "${BG_ID}" \
-              --region "${AWS_REGION}"
+            while true; do
+              BG_STATUS=$(aws rds describe-blue-green-deployments \
+                --blue-green-deployment-identifier "${BG_ID}" \
+                --region "${AWS_REGION}" \
+                --query 'BlueGreenDeployments[0].Status' --output text)
+              echo "  status: ${BG_STATUS}"
+              case "${BG_STATUS}" in
+                SWITCHOVER_COMPLETED)  break ;;
+                SWITCHOVER_IN_PROGRESS|AVAILABLE) sleep 20 ;;
+                SWITCHOVER_FAILED|INVALID_CONFIGURATION|DELETING)
+                                       echo "Switchover failed: ${BG_STATUS}"; exit 1 ;;
+                *)                     echo "Unexpected status: ${BG_STATUS}"; exit 1 ;;
+              esac
+            done
 
             echo "Switchover complete. Promoted engine_version=${TARGET_VERSION} on cluster=${CLUSTER_ID}."
           else
