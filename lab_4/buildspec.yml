@@ -101,7 +101,7 @@ phases:
 
           # Discover the target version from the plan (set by the student's edit
           # to local.target_engine_version, surfaced via the terraform_data shim).
-          TARGET_VERSION=$(jq -r '.resource_changes[] | select(.type=="terraform_data" and .name=="engine_version_target") | .change.after.input' tfplan.json)
+          TARGET_VERSION=$(jq -r '.resource_changes[] | select(.type=="terraform_data" and .name=="engine_version_target") | .change.after.input' terraform/tfplan.json)
           CURRENT_VERSION=$(aws rds describe-db-clusters \
             --db-cluster-identifier "${CLUSTER_ID}" \
             --region "${AWS_REGION}" \
