@@ -191,10 +191,10 @@ echo "CodeCommit:  $LAB3_CODECOMMIT_CLONE_URL"
 7. Add the Kubernetes-side violations to your list:
 
     - Deployment metadata is missing the required labels `environment` and `owner`.
-    - Container `myapp` pulls from `docker.io/library/nginx:latest`. Only images from your per-account Amazon ECR are permitted.
+    - Container `myapp` pulls from `docker.io/library/nginx:latest`. Only AWS-hosted images allowed (per-account ECR or `public.ecr.aws/*`).
     - Container `myapp` has no `resources.limits` block — neither memory nor CPU.
 
-> **Key Insight:** Open `policies/eks.rego` and look at the `approved_registry_regex` constant: `^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/`. The rule accepts any 12-digit AWS account, any region, any ECR repo. The intent is "must come from per-account ECR (not Docker Hub, not GHCR, not public registries)", not "must come from one specific account". The per-account regex is NOT pinned to a specific account because each student has their own.
+> **Key Insight:** Open `policies/eks.rego` and look at the two approved-registry regexes. `approved_ecr_private_regex` (`^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/`) matches any 12-digit AWS account's private ECR; `approved_ecr_public_regex` (`^public\.ecr\.aws/`) matches Amazon's public mirror. The intent is "must come from AWS-hosted infrastructure (not Docker Hub, not GHCR)". The per-account regex is NOT pinned to a specific account because each student has their own.
 
 > **What Just Happened?** You read the rules off the resource definitions before deployment, with no console or wiki lookup. Every item on your list maps directly to a Rego rule.
 
@@ -340,16 +340,9 @@ echo "CodeCommit:  $LAB3_CODECOMMIT_CLONE_URL"
 
 ### Task 7: Fix the Kubernetes Manifest
 
-> **Instructor demo before this task:** Your instructor will demo mirroring an upstream nginx image into per-student ECR via `docker pull` → `docker tag` → `docker push`. This is the [Client] production workflow — nothing pulls from Docker Hub or other public registries at runtime; all images flow through the controlled per-account ECR boundary. By the time you start this task, your `nginx` ECR repo has a `1.21` image in it.
+The EKS policy accepts images from EITHER your per-account ECR OR `public.ecr.aws/*` (Amazon's public mirror — anonymous-pull, no rate limits). For the default lab path, use `public.ecr.aws/docker/library/nginx:1.21` — it works out of the box. The per-account ECR option is covered as a bonus below.
 
-16. Get your ECR registry hostname — you'll embed it in the image reference:
-
-    ```bash
-    aws_account_id=$(aws sts get-caller-identity --query Account --output text)
-    echo "Your ECR registry: ${aws_account_id}.dkr.ecr.us-east-1.amazonaws.com"
-    ```
-
-17. Edit `kubernetes/deployment.yaml`. Replace its contents with the remediated version (substitute your real account ID in the `image:` line):
+16. Edit `kubernetes/deployment.yaml`. Replace its contents with the remediated version:
 
     ```yaml
     apiVersion: apps/v1
@@ -375,8 +368,8 @@ echo "CodeCommit:  $LAB3_CODECOMMIT_CLONE_URL"
         spec:
           containers:
             - name: myapp
-              # FIXED: Image from per-account ECR (mirrored from upstream by your instructor)
-              image: <your-account-id>.dkr.ecr.us-east-1.amazonaws.com/nginx:1.21
+              # FIXED: Image from Amazon ECR Public Gallery (allowed by policy)
+              image: public.ecr.aws/docker/library/nginx:1.21
               ports:
                 - containerPort: 80
               # FIXED: Memory and CPU limits + requests
@@ -389,12 +382,14 @@ echo "CodeCommit:  $LAB3_CODECOMMIT_CLONE_URL"
                   cpu: "100m"
     ```
 
-18. Confirm the EKS-specific policies are satisfied:
+17. Confirm the EKS-specific policies are satisfied:
 
     - `metadata.labels` and the pod template's `metadata.labels` both carry `environment` and `owner`.
-    - `image:` matches `approved_registry_regex` (`^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/`).
+    - `image:` matches `approved_ecr_public_regex` (`^public\.ecr\.aws/`). Per-account ECR is also accepted — see the bonus task below.
     - `resources.limits.memory` and `resources.limits.cpu` are both set.
     - Image is pinned to a specific version (`1.21`) rather than `latest`.
+
+> **Bonus (instructor demo): use per-account ECR instead.** [Client]'s production rule is "no public registries at runtime — all images flow through the controlled per-account ECR boundary." Your instructor will demo mirroring `nginx:1.21` from `public.ecr.aws` into your per-student ECR via `docker pull` → `docker tag` → `docker push`. After the demo, you can update your manifest to use `<your-account-id>.dkr.ecr.us-east-1.amazonaws.com/nginx:1.21` instead of `public.ecr.aws/...`, push, and watch the pipeline pass with the production-style image source.
 
 > **Note:** The remediated manifest also moves the workload out of `default` namespace and into `lab3`. This is not enforced by an OPA policy — it's a best practice carried over from Lab 1's `lab1-<student-id>` pattern, so each lab's resources stay isolated.
 
@@ -447,7 +442,7 @@ Before finishing, confirm you have completed:
 - [ ] Separate `aws_s3_bucket_server_side_encryption_configuration` resource added
 - [ ] All required tags added to both Terraform resources (+ `DataClass` on S3)
 - [ ] Lambda `timeout` reduced to a value ≤ 300
-- [ ] Container image swapped from `docker.io/library/nginx:latest` to per-account ECR `<your-account>.dkr.ecr.us-east-1.amazonaws.com/nginx:1.21`, pinned to a version
+- [ ] Container image swapped from `docker.io/library/nginx:latest` to `public.ecr.aws/docker/library/nginx:1.21` (or, after the instructor's bonus demo, your own per-account ECR), pinned to a version
 - [ ] Container `resources.limits` block added with both `memory` and `cpu`
 - [ ] `environment` and `owner` labels added at Deployment + pod-template level
 - [ ] Re-run pipeline shows Conftest reporting zero failures
@@ -463,8 +458,8 @@ Before finishing, confirm you have completed:
 | Conftest output empty in CodeBuild log | Build phase completed but no FAIL/PASS lines | Build phase failed before Conftest could run. Look earlier in the log for terraform plan errors. |
 | Re-run still shows S3 encryption failure | Validate stage red after remediation | You added an inline `server_side_encryption_configuration {}` block instead of a separate `aws_s3_bucket_server_side_encryption_configuration` resource. The inline form was removed from the AWS provider schema in v4.0. |
 | Lambda still flagged for missing tag | Conftest log shows tag-missing FAIL after you added the tag | Tag keys are case-sensitive. Confirm exact spelling: `Environment`, not `environment`. |
-| Container image policy still fails | "uses image from unapproved registry" after you changed it | Confirm the image string starts with a 12-digit account, then `.dkr.ecr.<region>.amazonaws.com/`. No `docker.io/`, no `ghcr.io/`, no `public.ecr.aws/`, no bare `nginx:latest`. |
-| Pod stuck in `ImagePullBackOff` after Deploy succeeds | Pod can't pull the image | The `nginx:1.21` image isn't in your per-account ECR yet. Re-run the instructor's `docker pull / tag / push` flow to mirror it in, then `kubectl delete pod` to force a re-pull. |
+| Container image policy still fails | "uses image from unapproved registry" after you changed it | Confirm the image string starts with EITHER a 12-digit account `.dkr.ecr.<region>.amazonaws.com/` OR `public.ecr.aws/`. No `docker.io/`, `ghcr.io/`, or bare `nginx:latest`. |
+| Pod stuck in `ImagePullBackOff` (bonus per-account ECR path) | Pod can't pull from your per-account ECR | The `nginx:1.21` image isn't in your per-account ECR yet -- run the instructor's `docker pull / tag / push` flow first. If you're on the default `public.ecr.aws` path, this shouldn't happen. |
 | Deploy stage fails after Validate passes | Deploy stage red but Validate was green | OPA gate passed; the actual apply hit a different problem (IAM perms, network, K8s namespace). Read the Deploy stage's CodeBuild log. |
 
 ---
@@ -500,7 +495,7 @@ The Terraform-created S3 bucket and Lambda function are torn down by `terraform 
 **Question 1:** The pipeline runs OPA against the plan JSON output, not against `terraform/main.tf`. Why does the validation stage evaluate the Terraform *plan* in JSON form rather than the source `.tf` file directly?
 <!-- source: Module_6_narrative.md §"Terraform Plan Evaluation" -->
 
-**Question 2:** The EKS policy uses `regex.match(approved_registry_regex, container.image)` against `^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/`. Why is this written as a regex over "any 12-digit AWS account" rather than `startswith(...)` pinned to one specific account? Give two reasons.
+**Question 2:** The EKS policy accepts EITHER per-account ECR (regex over "any 12-digit AWS account") OR `public.ecr.aws/*`. Why is the per-account regex written as "any 12-digit account" rather than pinned to one specific account? Why is ECR Public allowed at all when [Client]'s production rule is "private ECR only"?
 <!-- source: policies/eks.rego + Module_6_narrative.md §"EKS-Specific Policies" -->
 
 **Question 3:** A teammate proposes "fixing" the Lambda timeout violation by editing the OPA policy to raise the maximum from 300 to 900 seconds. Why is this not an acceptable remediation?

@@ -13,19 +13,24 @@ package main
 
 import future.keywords.in
 
-# Approved registry: per-account Amazon ECR only.
+# Approved registries (the policy enforces "image must come from an
+# AWS-hosted registry, not Docker Hub / GHCR / random registries"):
+#   1. Per-account Amazon ECR: <account-id>.dkr.ecr.<region>.amazonaws.com
+#      Used when students mirror upstream images into their own ECR
+#      (the [Client] production workflow -- nothing pulls from random
+#      public registries at runtime). The lab includes an instructor
+#      demo of `docker pull / tag / push` to mirror nginx into the
+#      student's ECR.
+#   2. Amazon ECR Public Gallery: public.ecr.aws/*
+#      AWS's public mirror of common images. Anonymous-pull, no auth
+#      needed. Allowed as a working path when no per-account mirror
+#      exists yet, so the lab completes end-to-end even before the
+#      instructor demo lands an image in the student's ECR.
 #
-# Pattern: <account-id>.dkr.ecr.<region>.amazonaws.com/<repo>:<tag>
-#
-# The policy enforces "image must be in YOUR private ECR" -- students mirror
-# upstream images into their own ECR via docker pull / tag / push before
-# deploying. This is the SYF production workflow: nothing pulls from
-# Docker Hub or other public registries at runtime; all images go through
-# the controlled per-account ECR boundary.
-#
-# The regex does NOT pin to a specific account -- each student has their
-# own account and the lab fixtures must work in any of them.
-approved_registry_regex := `^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/`
+# Per-account regex does NOT pin to a specific account -- each student
+# has their own and the lab fixtures must work in any of them.
+approved_ecr_private_regex := `^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/`
+approved_ecr_public_regex  := `^public\.ecr\.aws/`
 
 required_deployment_labels := ["environment", "owner"]
 
@@ -47,10 +52,11 @@ deny[msg] {
 deny[msg] {
 	input.kind == "Deployment"
 	container := input.spec.template.spec.containers[_]
-	not regex.match(approved_registry_regex, container.image)
+	not regex.match(approved_ecr_private_regex, container.image)
+	not regex.match(approved_ecr_public_regex, container.image)
 
 	msg := sprintf(
-		"Container '%s' uses image from unapproved registry '%s'",
+		"Container '%s' uses image from unapproved registry '%s' (allowed: per-account ECR or public.ecr.aws)",
 		[container.name, image_registry(container.image)],
 	)
 }
