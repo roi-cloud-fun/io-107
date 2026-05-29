@@ -11,13 +11,16 @@
 #
 # Tools installed:
 #   - jq, unzip, git, tar           (via dnf -- usually preinstalled on AL2023)
-#   - AWS CLI v2                    (latest, from awscli.amazonaws.com)
 #   - Terraform                     (HashiCorp zip release, pinned)
 #   - kubectl                       (Amazon EKS-matched build, pinned)
 #   - Helm                          (CNCF script from get.helm.sh)
 #   - Conftest                      (OPA project, pinned)
-#   - SAM CLI                       (via pip3)
+#   - SAM CLI                       (AWS-provided zip installer)
 #   - Docker                        (for Lab 3 bonus: docker pull/tag/push to ECR)
+#
+# NOT installed (already on AL2023):
+#   - AWS CLI v2 -- ships with the AMI. Script verifies it's present and bails
+#     with a clear error if not (would mean a non-AL2023 host).
 #
 # Usage:
 #   curl -sSL https://raw.githubusercontent.com/roi-cloud-fun/io-107/main/instructor/install_mgmt_tools.sh | sudo bash
@@ -63,18 +66,15 @@ dnf install -y jq unzip git tar gcc python3-pip
 echo
 
 # -----------------------------------------------------------------------------
-# AWS CLI v2
+# AWS CLI v2 (verify only -- ships preinstalled on AL2023)
 # -----------------------------------------------------------------------------
-echo "===== [2/9] AWS CLI v2 ====="
+echo "===== [2/9] AWS CLI v2 (verify) ====="
 if command -v aws >/dev/null 2>&1 && aws --version 2>&1 | grep -q "aws-cli/2"; then
-  echo "  already installed: $(aws --version)"
+  echo "  present: $(aws --version)"
 else
-  cd /tmp
-  curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}.zip" -o awscliv2.zip
-  unzip -q -o awscliv2.zip
-  ./aws/install --update
-  rm -rf aws awscliv2.zip
-  echo "  installed: $(aws --version)"
+  echo "  ERROR: aws CLI v2 not found. Are you on Amazon Linux 2023?"
+  echo "  Install manually: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
+  exit 1
 fi
 echo
 
