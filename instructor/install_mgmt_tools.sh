@@ -142,17 +142,32 @@ echo
 
 # -----------------------------------------------------------------------------
 # SAM CLI (for Lab 2 local testing)
+#
+# Use the AWS-provided zip installer rather than pip. On Amazon Linux 2023
+# the AWS CLI v2 bundled installer drops awscrt via RPM, and aws-sam-cli's
+# pip-installed awscrt conflicts: "Cannot uninstall awscrt: RECORD file not
+# found. The package was installed by rpm." The zip installer is a
+# self-contained PyOxidizer build that avoids the system Python entirely.
 # -----------------------------------------------------------------------------
 echo "===== [7/9] AWS SAM CLI ====="
 if command -v sam >/dev/null 2>&1; then
   echo "  already installed: $(sam --version)"
 else
-  pip3 install --quiet aws-sam-cli
-  SAM_PATH=$(python3 -c "import site; print(site.USER_BASE)" 2>/dev/null)/bin/sam
-  if [ -x "$SAM_PATH" ] && [ ! -e /usr/local/bin/sam ]; then
-    ln -sf "$SAM_PATH" /usr/local/bin/sam
+  case "$ARCH" in
+    x86_64)  SAM_ZIP="aws-sam-cli-linux-x86_64.zip" ;;
+    aarch64) SAM_ZIP="aws-sam-cli-linux-arm64.zip" ;;
+  esac
+  cd /tmp
+  curl -sSL -o sam.zip "https://github.com/aws/aws-sam-cli/releases/latest/download/${SAM_ZIP}"
+  unzip -q -o sam.zip -d sam-installation
+  # Installer is idempotent on re-run via --update; fresh install otherwise.
+  if [ -e /usr/local/aws-sam-cli ]; then
+    ./sam-installation/install --update
+  else
+    ./sam-installation/install
   fi
-  echo "  installed: $(sam --version 2>/dev/null || echo 'sam installed; open a new shell to use it')"
+  rm -rf sam.zip sam-installation
+  echo "  installed: $(sam --version)"
 fi
 echo
 
