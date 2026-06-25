@@ -1,0 +1,17 @@
+# IO-107 SDLC Pipeline — training_env / terraform.tfvars.example
+#
+# Copy this to terraform.tfvars and adjust as needed.
+# terraform.tfvars is gitignored — do not commit account-specific values.
+
+aws_region              = "us-east-1"
+vpc_cidr                = "10.20.0.0/16"
+eks_cluster_name        = "training-eks-cluster"
+eks_kubernetes_version  = "1.29"
+eks_node_instance_types = ["t3.medium"]
+eks_node_desired_size   = 2
+eks_node_max_size       = 6
+
+ecr_repo_names         = ["myapp", "nginx"]
+db_subnet_group_name   = "training"
+db_security_group_name = "training_db"
+codestar_provider      = "GitHub"

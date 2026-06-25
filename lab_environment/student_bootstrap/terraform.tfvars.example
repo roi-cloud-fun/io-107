@@ -1,0 +1,21 @@
+# IO-107 SDLC Pipeline — student_bootstrap / terraform.tfvars.example
+#
+# Each student copies this to terraform.tfvars and sets `student_id`.
+# terraform.tfvars is gitignored.
+
+aws_region = "us-east-1"
+student_id = "REPLACE-ME"   # lowercase, 1-16 chars, [a-z0-9-]
+
+training_env_backend_type = "s3"
+training_env_remote_state = {
+  bucket = "io107-tfstate-REGION"
+  key    = "training_env/terraform.tfstate"
+  region = "us-east-1"
+}
+
+# Toggle individual labs if you only want to provision a subset:
+# enable_lab1 = true
+# enable_lab2 = true
+# enable_lab3 = true
+# enable_lab4 = true
+
