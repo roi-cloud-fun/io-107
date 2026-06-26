@@ -199,6 +199,16 @@ else
 
 aws_region = "$REGION"
 student_id = "$STUDENT_ID"
+
+# Deploy labs one at a time by flipping these. Shared infra (VPC, EKS, ECR,
+# KMS, IAM) is always created on the first apply regardless of these flags;
+# they only gate each lab's per-lab resources (pipeline, CodeBuild, CodeCommit,
+# IRSA, and -- for lab4 -- Aurora). Set a lab false to skip it now, flip it
+# back to true and re-apply to add it later. Default: all enabled.
+enable_lab1 = true
+enable_lab2 = true
+enable_lab3 = true
+enable_lab4 = true
 EOF
   echo "    Written."
 fi
