@@ -53,7 +53,9 @@ env:
     # share `export`s across phases).
     CLUSTER_ID: "training-aurora"
     TF_VAR_cluster_identifier: "training-aurora"
-    AWS_REGION: "us-east-1"
+    # AWS_REGION is provided automatically by CodeBuild (= this project's region,
+    # i.e. the region you deployed to). Do NOT hardcode it, or non-us-east-1
+    # deploys break.
 
 phases:
   install:

@@ -34,8 +34,10 @@ io-107/
 git clone https://github.com/roi-cloud-fun/io-107.git
 cd io-107
 
-# 2. Create your per-student state backend + tfvars (no CodeStar/OAuth needed)
-./instructor/bootstrap.sh --student-id userXX   # use your userID (lowercase)
+# 2. Create your per-student state backend + tfvars (no CodeStar/OAuth needed).
+#    Both placeholders are intentionally invalid -- set your real values or the
+#    command fails fast (keeps everyone from piling into us-east-1).
+./instructor/bootstrap.sh --student-id userXX --region REGION   # your userID (lowercase) + your assigned region
 
 # 3. (optional) edit lab_environment/lab_env_student/terraform.tfvars to enable
 #    only the labs you want (enable_lab1..4 toggles); then apply

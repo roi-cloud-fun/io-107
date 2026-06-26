@@ -27,7 +27,9 @@ env:
     LAB_PHASE: "plan"          # overridden per-stage by the pipeline
     TERRAFORM_VERSION: "1.6.6"
     CONFTEST_VERSION: "0.46.0"
-    AWS_REGION: "us-east-1"
+    # AWS_REGION is provided automatically by CodeBuild (= this project's region,
+    # i.e. the region you deployed to). Do NOT hardcode it, or non-us-east-1
+    # deploys break.
     # EKS_CLUSTER_NAME and ARTIFACT_BUCKET are set on the CodeBuild project
     # by lab_env_student/ so the Deploy phase can run `kubectl apply` against
     # the per-student cluster and `terraform init` can configure the S3

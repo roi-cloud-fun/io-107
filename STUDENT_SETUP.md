@@ -76,11 +76,14 @@ the others off (you'll flip them on as we reach each lab).
 instance profile; makes a state bucket prefixed with your name):
 
 ```bash
-./instructor/bootstrap.sh --student-id <your-name>
+./instructor/bootstrap.sh --student-id userXX --region REGION
 ```
 
-Replace `<your-name>` with a short lowercase id (letters/digits/dashes, ≤16
-chars), e.g. `alice`. This creates `s3://io107-<your-name>-tfstate-<account>`,
+Replace **both** placeholders: `userXX` → a short lowercase id
+(letters/digits/dashes, ≤16 chars, e.g. `alice`), and `REGION` → your **assigned
+AWS region** (e.g. `us-west-2`). Both are intentionally invalid as written, so
+the command fails fast if you forget one — this keeps everyone from piling into
+us-east-1. It creates `s3://io107-<your-id>-tfstate-<account>` in your region,
 writes `backend.tf`, and writes a `terraform.tfvars` you'll edit next.
 
 **5b. Select just Lab 1.** Edit the tfvars:
