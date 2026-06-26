@@ -22,10 +22,10 @@ In the AWS Console → **EC2 → Launch instance**:
 | **Instance type** | `t3.medium` |
 | **Key pair** | Create or select one (you'll need it to SSH in) |
 | **Storage** | **30 GiB** gp3 (change the default 8 GiB) |
-| **IAM instance profile** | **Terraform Role** (Advanced details → IAM instance profile) |
+| **IAM instance profile** | **Terraform-InstanceRole** (Advanced details → IAM instance profile) |
 | **Security group** | Allow inbound **SSH (22)** from your IP |
 
-> The **Terraform Role** instance profile is what lets Terraform create AWS
+> The **Terraform-InstanceRole** instance profile is what lets Terraform create AWS
 > resources from the box — you won't run `aws configure` or paste any keys.
 
 Launch it, wait for **Instance state: Running** and a **2/2** status check.
@@ -150,7 +150,7 @@ faster, but `terraform destroy` handles everything.)
 
 | Symptom | Fix |
 |---|---|
-| `bootstrap.sh: aws ... not configured` | Confirm the **Terraform Role** instance profile is attached to the EC2 (Step 1). `aws sts get-caller-identity` should return an ARN. |
-| `terraform apply` denied creating a resource | Your IAM user / Terraform Role is missing a permission — note the exact action in the error and report it to the instructor. |
+| `bootstrap.sh: aws ... not configured` | Confirm the **Terraform-InstanceRole** instance profile is attached to the EC2 (Step 1). `aws sts get-caller-identity` should return an ARN. |
+| `terraform apply` denied creating a resource | Your IAM user / Terraform-InstanceRole is missing a permission — note the exact action in the error and report it to the instructor. |
 | `BucketAlreadyExists` on bootstrap | Someone used the same `--student-id`. Pick a unique one. |
 | `sam: command not found` after install | Open a new shell (the installer adds it to PATH). |
