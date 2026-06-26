@@ -84,6 +84,31 @@ By completing this lab, students will:
 
 ---
 
+## Using the main deploy's resources (read-only — NOT a state import)
+
+Lab 5 needs to *use* the existing cluster (and read ECR/OIDC/etc.), but it must
+**not** own or manage them. Do this with **read-only references**, never
+`terraform import`:
+
+- **`data "terraform_remote_state" "main"`** → points at the `lab_env_student`
+  S3 state and reads its **outputs** (`eks_cluster_name`, `ecr_repos`,
+  `eks_oidc_provider_arn`, region, …).
+- **`data "aws_eks_cluster"` + `data "aws_eks_cluster_auth"`** (by name) →
+  feed the Lab 5 `kubernetes` / `helm` provider config so Lab 5 can deploy
+  workloads *into* the existing cluster.
+
+> **Do NOT `terraform import` the cluster/pipelines into Lab 5.** Import makes
+> Lab 5 a *co-owner*: the same resource would live in two states, they'd drift
+> and clobber each other, and a `terraform destroy` in Lab 5 would delete the
+> cluster Labs 1–4 depend on. Read-only data sources keep ownership in the main
+> state where it belongs — Lab 5 only *creates* its own Aurora, namespace, IRSA,
+> and secret, and only *reads* everything else.
+
+EKS access: the student is the cluster creator (bootstrap admin), so their
+identity can already deploy into the cluster — no extra access entry needed.
+
+---
+
 ## What needs building (implementation checklist)
 
 Everything lives under **`lab_5/`**, deployed from its **own Terraform + state** — `lab_env_student/` is **not touched**:
