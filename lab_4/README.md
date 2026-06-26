@@ -77,9 +77,10 @@ echo "Aurora cluster: $LAB4_AURORA_CLUSTER_ID"
 
 ### Task 2: Clone the Repository
 
-3. Clone your per-student CodeCommit repo:
+3. Return to your home directory first (so you don't clone inside a previous lab's folder or the Terraform dir), then clone your per-student CodeCommit repo:
 
     ```bash
+    cd ~
     git clone "$LAB4_CODECOMMIT_CLONE_URL" lab4
     cd lab4
     ```

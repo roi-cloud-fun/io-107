@@ -45,9 +45,10 @@ echo "CodeCommit:  $LAB3_CODECOMMIT_CLONE_URL"
 
 ### Task 1: Clone the Repository
 
-1. Open your terminal. Clone your per-student CodeCommit repo:
+1. Open your terminal. Return to your home directory first (so you don't clone inside a previous lab's folder or the Terraform dir), then clone your per-student CodeCommit repo:
 
     ```bash
+    cd ~
     git clone "$LAB3_CODECOMMIT_CLONE_URL" lab3
     cd lab3
     ```

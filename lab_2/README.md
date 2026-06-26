@@ -46,9 +46,10 @@ echo "Pipeline:    $LAB2_PIPELINE_NAME"
 
 ### Task 1: Clone Your Per-Student Repository
 
-1. Open your terminal. Confirm `$LAB2_CODECOMMIT_CLONE_URL` is set (`echo` it). Then clone:
+1. Open your terminal. Confirm `$LAB2_CODECOMMIT_CLONE_URL` is set (`echo` it). Return to your home directory first — so you don't clone inside Lab 1's `myapp/` or the Terraform folder — then clone:
 
     ```bash
+    cd ~
     git clone "$LAB2_CODECOMMIT_CLONE_URL" lab2-sam-app
     cd lab2-sam-app
     ```

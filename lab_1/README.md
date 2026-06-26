@@ -63,9 +63,10 @@ git config --global credential.UseHttpPath true
 
 1. Open your terminal. Confirm the env vars from the Pre-Lab Setup are loaded by running `echo $LAB1_CODECOMMIT_CLONE_URL` — it should print a `https://git-codecommit.us-east-1.amazonaws.com/...` URL. If empty, re-run the `eval` block above.
 
-2. Clone your per-student CodeCommit repo. The bootstrap seeded it from the upstream `roi-cloud-fun/io-107` repo's `lab_1/` subdirectory:
+2. Return to your home directory first. The `eval` above ran from `lab_environment/lab_env_student/`, but you should **not** clone the app inside the Terraform folder — clone it in your home directory. (Your env vars persist across the `cd`.) Then clone your per-student CodeCommit repo, seeded from the upstream `roi-cloud-fun/io-107` repo's `lab_1/` subdirectory:
 
     ```bash
+    cd ~
     git clone "$LAB1_CODECOMMIT_CLONE_URL" myapp
     cd myapp
     ```
