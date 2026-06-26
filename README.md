@@ -6,14 +6,17 @@ Monorepo for ROI Training's IO-107 course. **Contains everything you need to sta
 
 ```
 io-107/
-├── instructor/                       ← START HERE if you're an instructor / LTF runner
-│   ├── pre_class_setup.md            Step-by-step: bootstrap state, apply Terraform, OAuth handshake
+├── STUDENT_SETUP.md                  ← START HERE (students): EC2 + toolchain + deploy
+├── instructor/                       Instructor / LTF tooling
+│   ├── bootstrap.sh                  Creates per-student S3 state backend + tfvars
+│   ├── install_mgmt_tools.sh         Toolchain installer for the instructor / LTF host
+│   ├── student_deploy_policy.json    IAM policy for the student group / Terraform role
 │   └── LTF_HANDOFF.md                Recipe for running the Lab Testing Framework
 │
 ├── lab_environment/
 │   └── lab_env_student/              Unified Terraform — one `apply` provisions everything
 │       ├── main.tf                   VPC, EKS, ECR, KMS, IRSA, CodePipeline, CodeBuild, CodeCommit
-│       ├── variables.tf              student_id, region, github_codestar_connection_arn
+│       ├── variables.tf              student_id, region, enable_lab1..4 toggles
 │       ├── outputs.tf                Per-student URLs, ARNs (LTF + lab guides read these)
 │       ├── versions.tf               Terraform 1.10+ + AWS provider 5.40+
 │       └── terraform.tfvars.example  Copy to terraform.tfvars and fill in
@@ -31,14 +34,12 @@ io-107/
 git clone https://github.com/roi-cloud-fun/io-107.git
 cd io-107
 
-# 2. Walk through the instructor checklist (S3 backend bootstrap, CodeStar OAuth, apply)
-open instructor/pre_class_setup.md      # macOS
-# or just read it on GitHub
+# 2. Create your per-student state backend + tfvars (no CodeStar/OAuth needed)
+./instructor/bootstrap.sh --student-id <your-name>
 
-# 3. Run Terraform
+# 3. (optional) edit lab_environment/lab_env_student/terraform.tfvars to enable
+#    only the labs you want (enable_lab1..4 toggles); then apply
 cd lab_environment/lab_env_student
-cp terraform.tfvars.example terraform.tfvars
-# edit terraform.tfvars: student_id, github_codestar_connection_arn
 terraform init
 terraform apply
 ```
