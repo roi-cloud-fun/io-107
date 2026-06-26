@@ -1056,6 +1056,41 @@ resource "aws_codepipeline" "lab1" {
     }
   }
 
+  # BONUS (gated): approval-gated production promotion. When
+  # `enable_lab1_prod_promotion` is false these emit nothing -- no diff to the
+  # tested dev-only pipeline.
+  dynamic "stage" {
+    for_each = var.enable_lab1_prod_promotion ? [1] : []
+    content {
+      name = "Approve-Prod"
+      action {
+        name     = "ManualApproval"
+        category = "Approval"
+        owner    = "AWS"
+        provider = "Manual"
+        version  = "1"
+      }
+    }
+  }
+
+  dynamic "stage" {
+    for_each = var.enable_lab1_prod_promotion ? [1] : []
+    content {
+      name = "Deploy-Prod"
+      action {
+        name            = "DeployProd"
+        category        = "Build"
+        owner           = "AWS"
+        provider        = "CodeBuild"
+        version         = "1"
+        input_artifacts = ["source_output"]
+        configuration = {
+          ProjectName = aws_codebuild_project.lab1_prod[0].name
+        }
+      }
+    }
+  }
+
 
   tags = merge(local.common_tags, { Lab = "lab1" })
 
@@ -1225,6 +1260,137 @@ resource "aws_iam_role_policy" "lab1_myapp_stg_role" {
       }
     ]
   })
+}
+
+# ----------------------------------------------------------------------------
+# LAB1 BONUS -- Approval-gated production promotion (additive, non-breaking).
+# Gated behind `enable_lab1_prod_promotion` (default false). When off, every
+# resource here has count 0 and the pipeline's dynamic prod stages emit
+# nothing -- the tested dev-only flow is byte-for-byte unchanged.
+# ----------------------------------------------------------------------------
+
+resource "aws_iam_role" "lab1_myapp_prod_role" {
+  count = var.enable_lab1 && var.enable_lab1_prod_promotion ? 1 : 0
+
+  name = "${local.name_prefix}-myapp-prod-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Federated = aws_iam_openid_connect_provider.eks_irsa.arn
+      }
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:lab1-${local.effective_student_id}-prod:myapp-sa"
+          "${replace(aws_eks_cluster.training.identity[0].oidc[0].issuer, "https://", "")}:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+
+  tags = merge(local.common_tags, { Lab = "lab1", IrsaRole = "myapp-prod-role" })
+}
+
+resource "aws_iam_role_policy" "lab1_myapp_prod_role" {
+  count = var.enable_lab1 && var.enable_lab1_prod_promotion ? 1 : 0
+  name  = "${local.name_prefix}-myapp-prod-role-inline"
+  role  = aws_iam_role.lab1_myapp_prod_role[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket", "s3:GetObject"]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = ["kms:Decrypt", "kms:GenerateDataKey"]
+        Resource = [
+          aws_kms_key.training_s3.arn,
+          aws_kms_key.training_logs.arn
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_codebuild_project" "lab1_prod" {
+  count = var.enable_lab1 && var.enable_lab1_prod_promotion ? 1 : 0
+
+  name         = "${local.name_prefix}-lab1-prod-build"
+  description  = "IO-107 SDLC Pipeline lab1 production promotion build project"
+  service_role = aws_iam_role.codebuild_service.arn
+
+  artifacts { type = "CODEPIPELINE" }
+
+  environment {
+    compute_type    = "BUILD_GENERAL1_SMALL"
+    image           = "aws/codebuild/standard:7.0"
+    type            = "LINUX_CONTAINER"
+    privileged_mode = true
+
+    environment_variable {
+      name  = "AWS_DEFAULT_REGION"
+      value = var.aws_region
+    }
+    environment_variable {
+      name  = "STUDENT_ID"
+      value = var.student_id
+    }
+    environment_variable {
+      name  = "CLUSTER_NAME"
+      value = aws_eks_cluster.training.name
+    }
+    environment_variable {
+      name  = "NAMESPACE"
+      value = "lab1-${local.effective_student_id}-prod"
+    }
+    environment_variable {
+      name  = "APP_NAME"
+      value = "myapp"
+    }
+    environment_variable {
+      name  = "ECR_REGISTRY"
+      value = split("/", aws_ecr_repository.app["myapp"].repository_url)[0]
+    }
+    environment_variable {
+      name  = "ECR_REPO"
+      value = aws_ecr_repository.app["myapp"].name
+    }
+    environment_variable {
+      name  = "ENVIRONMENT"
+      value = "prod"
+    }
+    # Single prod IRSA role ARN; buildspec selects it on $ENVIRONMENT=prod.
+    environment_variable {
+      name  = "IRSA_ROLE_ARN_PROD"
+      value = try(aws_iam_role.lab1_myapp_prod_role[0].arn, "")
+    }
+  }
+
+  source {
+    type      = "CODEPIPELINE"
+    buildspec = "buildspec.yml"
+  }
+
+  logs_config {
+    cloudwatch_logs {
+      group_name  = "/aws/codebuild/${local.name_prefix}-lab1-prod"
+      stream_name = "build"
+    }
+  }
+
+  tags = merge(local.common_tags, { Lab = "lab1" })
 }
 
 

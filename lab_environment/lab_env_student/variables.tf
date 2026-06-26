@@ -67,6 +67,12 @@ variable "enable_lab1" {
   default     = true
 }
 
+variable "enable_lab1_prod_promotion" {
+  description = "Bonus (Lab 1): add an approval-gated Deploy-Prod stage that promotes myapp to the lab1-<id>-prod namespace. Off by default so the tested dev-only flow is unchanged."
+  type        = bool
+  default     = false
+}
+
 variable "enable_lab2" {
   description = "Provision per-lab resources for lab2."
   type        = bool

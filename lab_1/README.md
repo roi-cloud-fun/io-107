@@ -384,3 +384,55 @@ In **Lab 2: Lambda Deployment with SAM**, you'll deploy a serverless application
 ---
 
 *Lab 1 Complete*
+
+---
+
+## Bonus (Optional): Promote to Production with an Approval Gate
+
+The lab you just finished deploys to `dev` only. Real-world delivery pipelines don't stop there — they take the *same* built artifact and promote it to higher environments (`stg`, `prod`) through a **manual approval gate**. A human reviews what is about to ship and explicitly clicks **Approve** before the production deploy runs. This bonus adds that pattern to your Lab 1 pipeline.
+
+The resulting pipeline shape is:
+
+```
+Source -> Build (deploys dev) -> Approve-Prod (manual gate) -> Deploy-Prod (deploys prod)
+```
+
+This is entirely **opt-in and additive**. It is gated behind a Terraform toggle that defaults to `false`, so leaving it off keeps the tested dev-only flow exactly as it was.
+
+### Steps
+
+1. **Enable the bonus.** In `lab_environment/lab_env_student/terraform.tfvars`, add:
+
+    ```hcl
+    enable_lab1_prod_promotion = true
+    ```
+
+    Then re-run `terraform apply` from `lab_environment/lab_env_student/`. This adds three things to *your* environment:
+    - an `Approve-Prod` manual-approval stage on your pipeline,
+    - a `Deploy-Prod` stage backed by a new prod CodeBuild project,
+    - a new prod IRSA role (`io107-<your-id>-<suffix>-myapp-prod-role`) trusted by the `myapp-sa` service account in the `lab1-<your-id>-<suffix>-prod` namespace.
+
+    Re-capture your env vars afterward (the same `eval` block from the Pre-Lab Setup) — two new outputs appear: `LAB1_PROD_NAMESPACE` and `LAB1_MYAPP_PROD_ROLE_ARN`.
+
+2. **Run the pipeline.** Push any change to `main` (or open your pipeline in the CodePipeline console and click **Release change**). The pipeline runs `Source`, then `Build` deploys to your `dev` namespace exactly as before.
+
+3. **Approve the promotion.** After `Build` succeeds, the pipeline **pauses** at the `Approve-Prod` stage and waits. In the CodePipeline console, find your pipeline, review the build that is about to be promoted, and click **Approve** (or **Reject** to stop it). Nothing reaches production until you approve.
+
+4. **Watch the prod deploy.** On approval, the `Deploy-Prod` stage runs the prod CodeBuild project. It uses the same `buildspec.yml` with `ENVIRONMENT=prod`, so it helm-deploys `myapp` to the `lab1-<your-id>-<suffix>-prod` namespace using `charts/myapp/values-prod.yaml` (note `replicaCount: 2` — production runs more replicas) and annotates the service account with the prod IRSA role.
+
+5. **Verify.** Confirm the production pods are running in their own namespace:
+
+    ```bash
+    kubectl get pods -n "$LAB1_PROD_NAMESPACE" -l app=myapp
+    ```
+
+    **Expected Result:** **Two** pods, both `Running` with `READY 1/1`, in a namespace completely separate from your `dev` namespace.
+
+### Why This Matters
+
+The approval gate and the separate production namespace are two of the most important deployment guardrails in any SDLC:
+
+- **Approval gates** put a deliberate human checkpoint between "it works in dev" and "it ships to customers." The pipeline still does all the mechanical work — build, push, deploy — but a person owns the decision to promote. That is the difference between continuous *delivery* (promotion on approval) and continuous *deployment* (promotion automatically).
+- **Environment isolation** means `dev` and `prod` run in separate namespaces with separate IRSA roles. A mistake, a bad config, or a compromised dev workload cannot reach production credentials or production traffic. The prod IRSA role trusts only the `myapp-sa` service account in the `-prod` namespace — nothing else can assume it.
+
+Turn the toggle back to `false` (or remove the line) and re-apply to return to the dev-only pipeline at any time.

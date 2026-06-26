@@ -1,0 +1,19 @@
+replicaCount: 2
+
+resources:
+  limits:
+    cpu: 250m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+serviceAccount:
+  annotations:
+    # IRSA role ARN is per-student (and per-account). The pipeline injects
+    # it via `--set "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$IRSA_ROLE_ARN"`.
+    # Defaulting to "" so a missing override produces a pod that fails to
+    # assume any role, rather than silently using the wrong account's role.
+    eks.amazonaws.com/role-arn: ""
+
+environment: prod

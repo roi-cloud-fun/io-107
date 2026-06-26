@@ -104,6 +104,16 @@ output "lab1_myapp_stg_role_arn" {
   description = "lab1 IRSA role ARN for myapp-stg-role. Substitute into chart values-dev.yaml before push."
 }
 
+# BONUS (gated by enable_lab1_prod_promotion). "(disabled)" unless the bonus is on.
+output "lab1_prod_namespace" {
+  value       = var.enable_lab1 && var.enable_lab1_prod_promotion ? "lab1-${local.effective_student_id}-prod" : "(disabled)"
+  description = "lab1 production K8s namespace (bonus; created by helm at first prod promotion)."
+}
+output "lab1_myapp_prod_role_arn" {
+  value       = try(aws_iam_role.lab1_myapp_prod_role[0].arn, "(disabled)")
+  description = "lab1 IRSA role ARN for myapp-prod-role (bonus; only present when enable_lab1_prod_promotion = true)."
+}
+
 output "lab2_pipeline_name" {
   value       = try(aws_codepipeline.lab2[0].name, "(disabled)")
   description = "lab2 CodePipeline name."

@@ -31,8 +31,9 @@ phases:
       # never have to hardcode an AWS account ID.
       - |
         case "$ENVIRONMENT" in
-          dev) IRSA_ROLE_ARN="$IRSA_ROLE_ARN_DEV" ;;
-          stg) IRSA_ROLE_ARN="$IRSA_ROLE_ARN_STG" ;;
+          dev)  IRSA_ROLE_ARN="$IRSA_ROLE_ARN_DEV" ;;
+          stg)  IRSA_ROLE_ARN="$IRSA_ROLE_ARN_STG" ;;
+          prod) IRSA_ROLE_ARN="$IRSA_ROLE_ARN_PROD" ;;
           *)   echo "Unknown ENVIRONMENT: $ENVIRONMENT"; exit 1 ;;
         esac
       # Self-heal stuck Helm releases. If a previous build was killed mid-
