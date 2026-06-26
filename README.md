@@ -48,6 +48,32 @@ terraform apply
 
 After `terraform apply` completes (~15 min for EKS), each lab's per-student CodeCommit repo is seeded with the matching `lab_<N>/` subdir of this monorepo (flattened to root). Students clone their CodeCommit URL from the Terraform outputs, edit, and push back to trigger their own pipeline.
 
+## Tear down
+
+Run from `lab_environment/lab_env_student/` with the **same profile/region** you deployed with.
+
+```bash
+cd lab_environment/lab_env_student
+
+# 1. Remove the Lab 1 app FIRST. Its LoadBalancer is created by Helm inside the
+#    cluster (not by Terraform), so deleting it first stops `terraform destroy`
+#    from hanging on the VPC delete.
+EKS=$(terraform output -raw eks_cluster_name)
+aws eks update-kubeconfig --name "$EKS" --region REGION   # your deploy region
+helm uninstall myapp -n "$(terraform output -raw lab1_namespace)" || true
+#    If you enabled the prod-promotion bonus, also:
+#    helm uninstall myapp -n "$(terraform output -raw lab1_prod_namespace)" || true
+
+# 2. Destroy everything (EKS, Aurora, pipelines, VPC, …) — ~10-15 min
+terraform destroy
+
+# 3. (optional) delete your per-student state bucket
+aws s3 rb "s3://io107-<your-id>-tfstate-<account-id>" --force
+```
+
+> **Lab 5** (if you ran it) is a separate deploy — tear it down on its own first:
+> `cd lab_5/terraform && terraform destroy`.
+
 ## How the labs use this repo
 
 | Lab | Subdir | Pipeline reads from |
