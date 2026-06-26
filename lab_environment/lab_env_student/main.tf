@@ -285,12 +285,12 @@ resource "aws_kms_key" "training_logs" {
 resource "aws_ecr_repository" "app" {
   for_each = toset(["myapp", "nginx"])
 
-  # Bare app name (no student_id prefix). The buildspec's docker push pattern is
-  # `$ECR_REGISTRY/$APP_NAME:$IMAGE_TAG` where APP_NAME is "myapp" -- so the
-  # repository must be named "myapp" exactly. Per-run isolation comes from the
-  # whole module being torn down with `terraform destroy`; the unified module is
-  # one-student-at-a-time by design.
-  name                 = each.value
+  # Student-prefixed repo name so multiple students can deploy into the SAME AWS
+  # account without colliding on the (account-global) ECR repository namespace.
+  # The buildspec pushes to `$ECR_REGISTRY/$ECR_REPO`, where ECR_REPO is injected
+  # as a CodeBuild env var equal to this repo's name -- keeping APP_NAME free for
+  # the Helm release / k8s app name ("myapp").
+  name                 = "${local.name_prefix}-${each.value}"
   image_tag_mutability = "MUTABLE"
   force_delete         = true
 
@@ -971,6 +971,10 @@ resource "aws_codebuild_project" "lab1" {
     environment_variable {
       name  = "ECR_REGISTRY"
       value = split("/", aws_ecr_repository.app["myapp"].repository_url)[0]
+    }
+    environment_variable {
+      name  = "ECR_REPO"
+      value = aws_ecr_repository.app["myapp"].name
     }
     environment_variable {
       name  = "ENVIRONMENT"

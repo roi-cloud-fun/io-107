@@ -21,8 +21,8 @@ phases:
 
   build:
     commands:
-      - docker build -t $ECR_REGISTRY/$APP_NAME:$IMAGE_TAG .
-      - docker push $ECR_REGISTRY/$APP_NAME:$IMAGE_TAG
+      - docker build -t $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG .
+      - docker push $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG
 
   post_build:
     commands:
@@ -62,7 +62,7 @@ phases:
           --namespace $NAMESPACE \
           --create-namespace \
           --values charts/myapp/values-$ENVIRONMENT.yaml \
-          --set image.repository=$ECR_REGISTRY/$APP_NAME \
+          --set image.repository=$ECR_REGISTRY/$ECR_REPO \
           --set image.tag=$IMAGE_TAG \
           --set "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$IRSA_ROLE_ARN" \
           --atomic \

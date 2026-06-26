@@ -80,8 +80,11 @@ PROFILE_ARG=()
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TF_DIR="$REPO_ROOT/lab_environment/lab_env_student"
-BUCKET="${COURSE_ID}-tfstate-${REGION}"
 STATE_KEY="lab_env_student/${STUDENT_ID}.tfstate"
+# BUCKET is set below, after we resolve the account ID (see "AWS auth"). Each
+# student gets their OWN state bucket, prefixed with their student_id and made
+# globally unique by the account ID -- S3 bucket names are global across ALL AWS
+# accounts, so a shared "io107-tfstate-<region>" name collides between students.
 
 echo "================================================================"
 echo "IO-107 bootstrap"
@@ -124,6 +127,13 @@ ACCOUNT_ID=$(echo "$CALLER" | jq -r '.Account')
 ARN=$(echo "$CALLER" | jq -r '.Arn')
 echo "    Account: $ACCOUNT_ID"
 echo "    Identity: $ARN"
+echo ""
+
+# Per-student state bucket: prefixed with student_id, made globally unique by
+# the account ID. All students can share one AWS account (each their own IAM
+# user) and still get a non-colliding, individually-owned state bucket.
+BUCKET="${COURSE_ID}-${STUDENT_ID}-tfstate-${ACCOUNT_ID}"
+echo "    State bucket: s3://$BUCKET"
 echo ""
 
 # --- State bucket ---
