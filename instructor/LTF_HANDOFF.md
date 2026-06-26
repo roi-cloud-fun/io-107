@@ -44,10 +44,11 @@ cd path/to/io-107/lab_environment/lab_env_student
 terraform destroy
 ```
 
-Everything in this stack is tagged with your `student_id`. The S3 state bucket persists (cheap, useful for re-runs); to remove that too:
+Everything in this stack is tagged with your `student_id`. The S3 state bucket persists (cheap, useful for re-runs); it's named `io107-<student_id>-tfstate-<account_id>` (bootstrap.sh creates one per student_id). To remove it too:
 
 ```bash
-aws s3 rb s3://io107-tfstate-us-east-1 --force
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+aws s3 rb "s3://io107-ltf-smoke-tfstate-${ACCOUNT_ID}" --force
 ```
 
 ## Known gotchas per lab
