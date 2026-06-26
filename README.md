@@ -58,10 +58,15 @@ The seeding happens at `terraform apply` time via a `null_resource` provisioner 
 
 ## Student-facing lab guides
 
-The student-facing markdown guides are NOT in this repo — they're authored in [CourseCreationKit](https://drive.google.com/drive/) and rendered as ROI-branded Google Docs for students to follow. This repo holds the **code** the labs operate on; the **instructions** are the Google Docs.
+Everything students follow is **markdown in this repo** — no external docs. Point students here, in order:
 
-If you need the lab guide markdown for reference, they live at:
-`courses/SYF/stream2_aws_intermediate/IO-107_SDLC_Pipeline/content/labs/Lab_*_Guide.md` in CourseCreationKit.
+1. **[STUDENT_SETUP.md](STUDENT_SETUP.md)** — one-time setup: launch the EC2 workstation, install the toolchain, clone, and deploy the lab environment.
+2. **[Lab 1 — End-to-End EKS Deployment Pipeline](lab_1/README.md)**
+3. **[Lab 2 — Lambda Deployment with SAM](lab_2/README.md)**
+4. **[Lab 3 — Policy-as-Code Evaluation](lab_3/README.md)**
+5. **[Lab 4 — Aurora Blue/Green Deployment](lab_4/README.md)**
+
+This repo holds both the **code** the labs operate on and the **instructions** students follow.
 
 ## Updating lab content
 
