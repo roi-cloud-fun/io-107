@@ -1,0 +1,15 @@
+apiVersion: v2
+name: myapp
+description: IO-107 Lab 5 "items" API — manual Blue/Green on Amazon EKS over Aurora PostgreSQL.
+type: application
+
+# Chart version — bump when the chart structure changes.
+version: 0.1.0
+
+# App version — informational; the running v1/v2 behavior is selected by the
+# blue/green Deployment env vars, not by this field.
+appVersion: "1.0.0"
+
+home: https://example.invalid/io107-lab5-bluegreen
+maintainers:
+  - name: Training Platform Team

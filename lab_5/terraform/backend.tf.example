@@ -1,0 +1,19 @@
+# Lab 5 has its OWN, independent state — separate from lab_env_student so it can
+# be applied, destroyed, or skipped with zero effect on the tested Labs 1-4.
+#
+# Copy this to backend.tf and set a UNIQUE key (do not reuse your
+# lab_env_student key). Reuse the same state bucket your main deploy uses.
+#
+#   cp backend.tf.example backend.tf
+#
+# Terraform 1.10+ supports native S3 locking via use_lockfile = true.
+
+terraform {
+  backend "s3" {
+    bucket       = "io107-REPLACE-WITH-YOUR-STUDENT-ID-tfstate-REPLACE-WITH-ACCOUNT"
+    key          = "lab_5/REPLACE-WITH-YOUR-STUDENT-ID.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true
+  }
+}

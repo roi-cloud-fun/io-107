@@ -1,0 +1,81 @@
+# IO-107 Lab 5 — myapp Blue/Green chart values.
+#
+# ONE image, TWO Deployments. Blue = v1 (priority disabled), Green = v2 (priority
+# enabled). The main Service's selector includes color={{ .Values.activeColor }};
+# flipping activeColor blue<->green is the zero-downtime cutover students perform.
+
+image:
+  # Per-student ECR repo created by lab_5/terraform (output: lab5_ecr_repo_url).
+  # Default "" so a missing --set fails loudly at `helm template` time rather
+  # than silently pulling from someone else's account.
+  repository: ""
+  # Image tag MUST be set at install time (--set image.tag=...). Default empty
+  # so a missing override fails fast instead of deploying a mutable "latest".
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Which color the main (LoadBalancer) Service routes to. Start on blue; flip to
+# green to cut over. This is the single value students change to switch traffic.
+activeColor: "blue"
+
+# Gate each Deployment so the README's step ordering works: deploy blue first,
+# then add green alongside it in a later step.
+blue:
+  enabled: true
+green:
+  enabled: false
+
+# Aurora connection details (from lab_5/terraform outputs).
+db:
+  # Secrets Manager secret holding the Aurora master-user credentials.
+  secretName: ""
+  # Writer endpoint — fallback for host if the managed secret omits it.
+  host: ""
+  # Database name created on the cluster.
+  name: "appdb"
+
+# AWS region the app's boto3 clients target.
+region: "us-east-1"
+
+# IRSA service account. Helm creates it; the role ARN comes from
+# lab_5/terraform output lab5_myapp_role_arn.
+serviceAccount:
+  create: true
+  name: myapp-sa
+  roleArn: ""
+
+service:
+  # Main Service: type LoadBalancer, selector app=myapp + color=<activeColor>.
+  type: LoadBalancer
+  port: 80
+  targetPort: 8080
+
+containerPort: 8080
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+replicaCount: 2
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 2
+  failureThreshold: 3

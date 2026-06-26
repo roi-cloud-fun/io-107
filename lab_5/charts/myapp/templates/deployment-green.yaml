@@ -1,0 +1,45 @@
+{{- if .Values.green.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "myapp.name" . }}-green
+  labels:
+    {{- include "myapp.labels" . | nindent 4 }}
+    color: green
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "myapp.name" . }}
+      color: green
+  template:
+    metadata:
+      labels:
+        app: {{ include "myapp.name" . }}
+        color: green
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ required "image.tag must be set (--set image.tag=...)" .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+              protocol: TCP
+          env:
+            # Green = v2: priority feature ON (reads/writes the new column).
+            - name: APP_VERSION
+              value: "v2"
+            - name: ENABLE_PRIORITY
+              value: "true"
+            - name: COLOR
+              value: "green"
+            {{- include "myapp.dbEnv" . | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+{{- end }}

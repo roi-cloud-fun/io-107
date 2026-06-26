@@ -1,0 +1,45 @@
+{{- if .Values.blue.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "myapp.name" . }}-blue
+  labels:
+    {{- include "myapp.labels" . | nindent 4 }}
+    color: blue
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "myapp.name" . }}
+      color: blue
+  template:
+    metadata:
+      labels:
+        app: {{ include "myapp.name" . }}
+        color: blue
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ required "image.tag must be set (--set image.tag=...)" .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+              protocol: TCP
+          env:
+            # Blue = v1: priority feature OFF (backward-compatible reads/writes).
+            - name: APP_VERSION
+              value: "v1"
+            - name: ENABLE_PRIORITY
+              value: "false"
+            - name: COLOR
+              value: "blue"
+            {{- include "myapp.dbEnv" . | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+{{- end }}

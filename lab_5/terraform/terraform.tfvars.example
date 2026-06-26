@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars and fill in your values:
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# student_id and aws_region must match your main lab_env_student deploy.
+# main_remote_state points at THAT deploy's S3 state so Lab 5 can read its
+# outputs (cluster name, VPC, subnets, worker SG, OIDC) read-only.
+
+student_id = "REPLACE-WITH-YOUR-STUDENT-ID"
+aws_region = "us-east-1"
+
+main_remote_state = {
+  bucket = "io107-REPLACE-WITH-YOUR-STUDENT-ID-tfstate-REPLACE-WITH-ACCOUNT"
+  key    = "lab_env_student/REPLACE-WITH-YOUR-STUDENT-ID.tfstate"
+  region = "us-east-1"
+}

@@ -134,6 +134,13 @@ terraform apply
 > Shortcut: to deploy **all four labs at once** instead, skip the tfvars edit
 > and run `./instructor/bootstrap.sh --student-id <your-name> --apply`.
 
+> **Lab 5 (advanced / optional capstone)** is different: it is a **separate,
+> independent deploy** with its **own** Terraform state under `lab_5/terraform/`.
+> It does **not** use the `enable_lab5` toggle and does **not** touch this
+> environment — it only reads your existing EKS cluster read-only and creates
+> its own Aurora + workloads. Follow [`lab_5/README.md`](lab_5/README.md) when
+> you reach it; you can run or skip it with zero effect on Labs 1–4.
+
 ---
 
 ## Tear-down (end of class)

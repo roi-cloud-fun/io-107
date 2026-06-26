@@ -68,6 +68,7 @@ Everything students follow is **markdown in this repo** — no external docs. Po
 3. **[Lab 2 — Lambda Deployment with SAM](lab_2/README.md)**
 4. **[Lab 3 — Policy-as-Code Evaluation](lab_3/README.md)**
 5. **[Lab 4 — Aurora Blue/Green Deployment](lab_4/README.md)**
+6. **[Lab 5 — Blue/Green a Stateful App on EKS + Aurora](lab_5/README.md)** *(advanced / optional capstone — independent deploy with its own Terraform state; does not touch the Labs 1–4 environment)*
 
 This repo holds both the **code** the labs operate on and the **instructions** students follow.
 

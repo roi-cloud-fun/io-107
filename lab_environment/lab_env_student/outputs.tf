@@ -33,6 +33,32 @@ output "kubeconfig_command" {
   description = "Run this to put the cluster into your local kubeconfig."
 }
 
+# ---------------------------------------------------------------------------
+# Additive outputs consumed by the independent lab_5/ deploy (read-only).
+# These expose existing networking/EKS attributes so Lab 5's own Terraform can
+# reference them via terraform_remote_state. They add NO resources and change
+# nothing about the tested Labs 1-4 deploy.
+# ---------------------------------------------------------------------------
+output "vpc_id" {
+  value       = aws_vpc.training.id
+  description = "Training VPC id (read by lab_5 for its Aurora SG)."
+}
+
+output "private_subnet_ids" {
+  value       = aws_subnet.private[*].id
+  description = "Private subnet ids (read by lab_5 for its Aurora subnet group)."
+}
+
+output "eks_workers_security_group_id" {
+  value       = aws_security_group.eks_workers.id
+  description = "EKS worker node security group id (read by lab_5 to allow Aurora ingress 5432)."
+}
+
+output "eks_oidc_issuer" {
+  value       = aws_eks_cluster.training.identity[0].oidc[0].issuer
+  description = "EKS OIDC issuer URL (read by lab_5 to build IRSA trust conditions)."
+}
+
 
 output "ecr_repos" {
   value       = { for k, r in aws_ecr_repository.app : k => r.repository_url }

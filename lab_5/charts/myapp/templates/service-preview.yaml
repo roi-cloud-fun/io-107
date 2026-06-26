@@ -1,0 +1,20 @@
+{{- if .Values.green.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "myapp.name" . }}-preview
+  labels:
+    {{- include "myapp.labels" . | nindent 4 }}
+spec:
+  # ClusterIP, pinned to green: lets you validate v2 against live Aurora data
+  # (via port-forward) BEFORE moving any production traffic off blue.
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort | default .Values.containerPort }}
+      protocol: TCP
+      name: http
+  selector:
+    app: {{ include "myapp.name" . }}
+    color: green
+{{- end }}

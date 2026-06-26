@@ -1,0 +1,24 @@
+-- IO-107 Lab 5 — CONTRACT migration (placeholder, run LATER / not in Part A).
+--
+-- The "contract" half of expand/contract happens only AFTER the old version is
+-- fully retired — i.e. once blue (v1) is gone and every running pod is green
+-- (v2). At that point it is safe to remove backward-compatibility scaffolding
+-- and tighten the schema. DO NOT run this while any v1 pod could still be
+-- serving traffic.
+--
+-- For THIS lab there is nothing to drop — `priority` is the feature column v2
+-- keeps using, so the contract step is intentionally a no-op narrative marker.
+-- The statements below are COMMENTED OUT and shown only to illustrate the shape
+-- of a real contract migration (e.g. dropping a column that only v1 needed, or
+-- adding a NOT NULL constraint once all rows are backfilled).
+--
+-- Example contract operations (DO NOT UNCOMMENT in Part A):
+--
+--   -- 1. A column that only the retired v1 needed can now be dropped:
+--   -- ALTER TABLE items DROP COLUMN IF EXISTS legacy_field;
+--
+--   -- 2. Now that every writer is v2 and backfill is complete, enforce the
+--   --    invariant v2 assumes:
+--   -- ALTER TABLE items ALTER COLUMN priority SET DEFAULT 0;
+--   -- UPDATE items SET priority = 0 WHERE priority IS NULL;
+--   -- ALTER TABLE items ALTER COLUMN priority SET NOT NULL;
