@@ -37,7 +37,11 @@ locals {
   vpc_id             = local.main_outputs.vpc_id
   private_subnet_ids = local.main_outputs.private_subnet_ids
   workers_sg_id      = local.main_outputs.eks_workers_security_group_id
-  oidc_provider_arn  = local.main_outputs.eks_oidc_provider_arn
+  # EKS managed node groups attach the CLUSTER security group (not the standalone
+  # workers SG) to node/pod ENIs, so Aurora must allow ingress from the cluster
+  # SG for pods to reach the DB. Sourced from the cluster data source.
+  cluster_sg_id     = data.aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+  oidc_provider_arn = local.main_outputs.eks_oidc_provider_arn
   # Issuer without the https:// scheme — used in the IRSA trust conditions.
   oidc_issuer_host = replace(local.main_outputs.eks_oidc_issuer, "https://", "")
 }
@@ -67,8 +71,8 @@ resource "aws_security_group" "aurora" {
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [local.workers_sg_id]
-    description     = "Postgres from the main deploy's EKS worker nodes"
+    security_groups = [local.cluster_sg_id, local.workers_sg_id]
+    description     = "Postgres from the EKS cluster + worker node security groups"
   }
 
   egress {
