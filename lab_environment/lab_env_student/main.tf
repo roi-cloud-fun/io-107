@@ -884,6 +884,7 @@ resource "null_resource" "lab1_seed" {
   }
 
   provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
     command = <<-EOT
       set -e
       WORK=$(mktemp -d)
@@ -1454,6 +1455,7 @@ resource "null_resource" "lab2_seed" {
   }
 
   provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
     command = <<-EOT
       set -e
       WORK=$(mktemp -d)
@@ -1716,6 +1718,7 @@ resource "null_resource" "lab3_seed" {
   }
 
   provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
     command = <<-EOT
       set -e
       WORK=$(mktemp -d)
@@ -2041,6 +2044,7 @@ resource "null_resource" "lab4_seed" {
   }
 
   provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
     command = <<-EOT
       set -e
       WORK=$(mktemp -d)
