@@ -177,7 +177,7 @@ resource "null_resource" "vpc_lb_cleanup" {
 }
 
 resource "aws_subnet" "public" {
-  count                   = 3
+  count                   = length(local.azs)
   vpc_id                  = aws_vpc.training.id
   cidr_block              = cidrsubnet(var.vpc_cidr, 4, count.index)
   availability_zone       = local.azs[count.index]
@@ -191,7 +191,7 @@ resource "aws_subnet" "public" {
 }
 
 resource "aws_subnet" "private" {
-  count             = 3
+  count             = length(local.azs)
   vpc_id            = aws_vpc.training.id
   cidr_block        = cidrsubnet(var.vpc_cidr, 4, count.index + 8)
   availability_zone = local.azs[count.index]
@@ -242,13 +242,13 @@ resource "aws_route_table" "private" {
 }
 
 resource "aws_route_table_association" "public" {
-  count          = 3
+  count          = length(local.azs)
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
 }
 
 resource "aws_route_table_association" "private" {
-  count          = 3
+  count          = length(local.azs)
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
 }
