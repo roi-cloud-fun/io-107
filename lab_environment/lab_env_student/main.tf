@@ -56,7 +56,7 @@ resource "random_id" "run" {
 }
 
 locals {
-  azs = slice(data.aws_availability_zones.available.names, 0, 3)
+  azs = slice(data.aws_availability_zones.available.names, 0, min(3, length(data.aws_availability_zones.available.names)))
 
   # Effective unique tag: explicit override > random per-apply.
   _run_suffix          = var.name_suffix != "" ? var.name_suffix : random_id.run.hex
