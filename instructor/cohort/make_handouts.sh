@@ -67,9 +67,12 @@ for S in "${STUDENTS[@]}"; do
     WSJ="$HERE/workstations-$REGION.json"
     if [ -f "$WSJ" ]; then
       WSID=$(jq -r --arg s "$S" '.workstations.value[$s].instance_id // empty' "$WSJ" 2>/dev/null)
-      WSIP=$(jq -r --arg s "$S" '.workstations.value[$s].public_ip // empty' "$WSJ" 2>/dev/null)
+      # Deliberately NOT printing the public IP: workstations are stopped
+      # between sessions and get a NEW IP on every start, so a printed one goes
+      # stale immediately. The instance id is stable for the life of the box,
+      # and EC2 Instance Connect from the Console does not need an IP anyway.
       if [ -n "$WSID" ]; then
-        echo "| **Your workstation** | \`$WSID\` (${WSIP:-no public ip}) |"
+        echo "| **Your workstation** | \`$WSID\` |"
         echo
         echo "## Step 1–4 are already done for you"
         echo

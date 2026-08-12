@@ -920,3 +920,70 @@ get wrong), cluster, kubeconfig line, all four repo URLs + pipelines, ECR, Auror
 endpoint. Written to `$IO107_OPS_DIR/handouts/`, **outside the checkout** —
 verified git reports them as "outside repository" — because they carry the
 account id. Generated for all 8 students.
+
+---
+
+## 16. Student workstations built + cohort power control (2026-08-12 04:30)
+
+### The "didn't we have an EC2 that installs kubectl?" question — answered
+
+Half true. `instructor/install_mgmt_tools.sh` and `scripts/install_student_deps.sh`
+do install kubectl/Helm/Terraform/Conftest/SAM — but both run on a host that
+**already exists**. Searched every file type, not just `.tf`: the only
+`aws_instance` resources on the machine are in
+`testing_framework/_workspace/repos/Advanced_Terraform/lab3/`, which is a
+**different course's** lab content held as test fixtures. `git log -S` confirms
+IO-107 has never had one. The installer existed; the instance never did.
+
+### Now it does — `instructor/workstations/` (commit `2d6abc8`)
+
+One `t3.medium` per student, **8 built and verified**:
+
+- latest AL2023 from SSM (no `ami-*` to rot between cohorts)
+- 30 GiB encrypted gp3 — the 8 GiB default fills during Lab 3's Docker work
+- `Terraform-InstanceRole`, IMDSv2 required
+- inbound SSH **only** from the region's EC2 Instance Connect ranges via
+  `aws_ip_ranges` — no `0.0.0.0/0`, no key pairs to distribute. Students already
+  hold `EC2InstanceConnect`, so no IAM change was needed. SSM Session Manager
+  was rejected: `Terraform-InstanceRole` has no `AmazonSSMManagedInstanceCore`
+  and `attendees` has no `ssm:StartSession`.
+- default VPC on purpose — outbound internet only, no coupling to lab VPCs
+
+**Separate module, separate state, deliberately.** Adding instances to
+`lab_env_student` would mean re-applying 8 verified environments; here the worst
+case is a broken workstation.
+
+Verified from the boxes' own console output, not just terraform's exit code:
+aws-cli 2.33.15, Terraform 1.10.5, kubectl 1.29.0, Helm 3.14.4, Conftest 0.50.0,
+SAM 1.165.0, **zero `MISSING`**; repo cloned to `~/io-107`; git configured for
+CodeCommit; MOTD carries the student's id and the never-`apply` warning.
+
+**This removes Steps 1–4 of `STUDENT_SETUP.md` entirely** for this cohort.
+Handouts now name each student's instance and say to start at Step 5.
+
+Capacity after: us-east-1 24/60 vCPU, us-east-2 24/32 (8 spare). No quota issue —
+it is 4 workstations *per region*, not 8.
+
+### `power.sh` — the off switch
+
+`status` / `stop` / `start`, covering workstations + Aurora. **Leaves EKS alone
+on purpose**: control planes cannot be stopped, and stopping worker nodes just
+makes the node group replace them.
+
+### ⚠️ Stopped instances get a NEW public IP on every start
+
+Found when the boxes went to `stopped` and their IPs read `None`. `make_handouts.sh`
+therefore prints **only the instance id**, which is stable for the life of the
+box — a printed IP would be wrong the moment the cohort is restarted, and EC2
+Instance Connect from the Console does not need one. If you ever need stable
+addresses, attach EIPs (and mind the charge for unattached ones).
+
+### FINAL STATE — everything parked
+
+All 8 workstations `stopped`, all 8 Aurora clusters `stopped`, 8 EKS clusters
+still ACTIVE (unavoidable). Steady burn is ~$0.80/hr of control planes plus
+~$0.33/hr of worker nodes plus storage; workstations and databases contribute
+nothing until `./power.sh start`.
+
+**Before the next session:** `./power.sh start` roughly 15 minutes ahead —
+Aurora is the slow one.
