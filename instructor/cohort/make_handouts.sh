@@ -61,6 +61,30 @@ for S in "${STUDENTS[@]}"; do
     echo "| Region | \`$REGION\` |"
     echo "| EKS cluster | \`$CLUSTER\` |"
     echo "| Lab 1 namespace | \`$(get lab1_namespace)\` |"
+
+    # Workstation details, if the workstations module has been applied for this
+    # region. Its outputs live in workstations-<region>.json next to this one.
+    WSJ="$HERE/workstations-$REGION.json"
+    if [ -f "$WSJ" ]; then
+      WSID=$(jq -r --arg s "$S" '.workstations.value[$s].instance_id // empty' "$WSJ" 2>/dev/null)
+      WSIP=$(jq -r --arg s "$S" '.workstations.value[$s].public_ip // empty' "$WSJ" 2>/dev/null)
+      if [ -n "$WSID" ]; then
+        echo "| **Your workstation** | \`$WSID\` (${WSIP:-no public ip}) |"
+        echo
+        echo "## Step 1–4 are already done for you"
+        echo
+        echo "Your workstation is built, the lab toolchain is installed, and the course"
+        echo "repo is cloned to \`~/io-107\` with git already set up for CodeCommit."
+        echo "**Skip Steps 1–4 of \`STUDENT_SETUP.md\` and start at Step 5.**"
+        echo
+        echo "Connect from the AWS Console — no key pair needed:"
+        echo
+        echo "> **EC2 → Instances → \`$WSID\` → Connect → EC2 Instance Connect**, user \`ec2-user\`"
+        echo
+        echo "If the instance is stopped, ask the instructor to start it (they are parked"
+        echo "between sessions to save cost)."
+      fi
+    fi
     echo
     echo "## Step 5a — copy this exactly"
     echo
