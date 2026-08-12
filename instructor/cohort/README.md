@@ -31,6 +31,7 @@ plan files and logs must never land in git.
 | `drive_labs34.sh` | poll labs 3/4 pipelines to a terminal state, auto-approving lab 4's manual gate |
 | `remediate_labs34.sh` | apply the fixes students are meant to make, so labs 3/4 can be rehearsed end-to-end |
 | `teardown_complete.sh` | 6-phase teardown — **`terraform destroy` alone is not sufficient** |
+| `make_handouts.sh` | one-page handout per student from their `outputs-<id>.json`; written to `$IO107_OPS_DIR/handouts/`, outside the checkout (they contain the account id — do not commit) |
 
 ```bash
 ./deploy_cohort_parallel.sh                       # everyone
@@ -63,3 +64,13 @@ Full detail in `DEPLOY_LOG.md`; the short version:
 - **EC2 vCPU quota** is the usual blocker: ~6 vCPU per student steady (2
   t3.medium nodes + the student's own management EC2). The default quota of 5
   will not run a single environment.
+- **Pre-deploying changes what students must do.** `STUDENT_SETUP.md` now tells
+  them to *connect* to an existing environment, never to `terraform apply` —
+  applying with a partial set of lab toggles reads the pre-built state and
+  deletes every lab that is switched off (measured: **31 resources**). If you
+  ever switch back to students deploying their own environments, that document
+  has to change back too. Give each student their `make_handouts.sh` page so the
+  `--student-id` / `--region` values are never guessed.
+- **Nothing creates student EC2 instances.** Students launch their own per
+  `STUDENT_SETUP.md` Step 1, using the `Terraform-InstanceRole` instance
+  profile. Confirm that profile exists in the account before class.

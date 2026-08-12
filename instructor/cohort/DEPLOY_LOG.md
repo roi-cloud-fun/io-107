@@ -842,3 +842,81 @@ because the chart requires the value.
 **No re-seed needed.** Confirmed there are no lab5 CodeCommit repos — students
 have exactly 4 repos each (lab1–lab4) in both regions, so lab 5 is consumed
 straight from the GitHub monorepo. The push is sufficient.
+
+---
+
+## 15. 🚨 STUDENT_SETUP.md would have destroyed 31 resources per student (03:40)
+
+Triggered by the question "how are the students deploying the other labs or
+making changes?" — the honest answer was that the documented path breaks things.
+
+### There are no student EC2 instances, and there never were
+
+- **Zero** `aws_instance` / `aws_launch_template` / Cloud9 resources anywhere in
+  the repo, and `git log -S 'resource "aws_instance"'` returns **nothing across
+  every commit**. Terraform in this repo has never created student boxes.
+- Students launch their own: `STUDENT_SETUP.md` Step 1, Console → t3.medium
+  AL2023, 30 GiB, instance profile **`Terraform-InstanceRole`** — verified that
+  profile exists in the account.
+- `scripts/install_student_deps.sh` is their toolchain one-liner;
+  `instructor/install_mgmt_tools.sh` is the same idea for the instructor host.
+- So the 16 running EC2 instances are **all EKS worker nodes**, 2 per student.
+
+### The docs assumed self-service; we pre-deployed
+
+`STUDENT_SETUP.md` Step 5 told each student to run `bootstrap.sh` then
+`terraform apply`. `bootstrap.sh` writes a backend pointing at
+`io107-<id>-tfstate-<account>` key `lab_env_student/<id>.tfstate` — **exactly the
+state the instructor deploy created**. So a student following Step 5b (set
+`enable_lab1=true`, rest `false`) attaches to their own pre-built environment and
+switches three quarters of it off.
+
+Confirmed by read-only plan against user04's real state with precisely the tfvars
+Step 5b dictated:
+
+```
+Plan: 0 to add, 0 to change, 31 to destroy.
+```
+
+Including `aws_rds_cluster.lab4_aurora`, its writer, and every lab 2/3/4
+pipeline, CodeBuild project, CodeCommit repo and artifact bucket. **The first
+command of the class would have deleted most of each environment.**
+
+### Permissions were fine — only the instructions were wrong
+
+Simulated for user04: `codecommit:GitPush`, `codecommit:GitPull`,
+`eks:DescribeCluster`, `s3:GetObject` → all **allowed** (group `attendees`:
+TerraformPowerUser + ViewOnlyAccess + EC2InstanceConnect). Combined with the
+per-student EKS access entries from §12, students can already do everything the
+labs need. Nobody had told them how.
+
+### Fix — `STUDENT_SETUP.md` rewritten as connect-not-deploy
+
+Key insight that kept the change small: **every lab README begins with
+`terraform output -json` from `lab_env_student/`**, so students still need a
+working Terraform directory — they just must never `apply`. `terraform init` and
+`terraform output` are read-only. That confined the fix to `STUDENT_SETUP.md`
+instead of rewriting all four lab guides.
+
+- Step 5 is now "Connect to your lab environment": `bootstrap.sh` (writes
+  backend.tf, creates nothing) → `terraform init` → `terraform output` →
+  `update-kubeconfig` → CodeCommit credential helper. Opens with a stop-block
+  naming the 31-resource consequence.
+- `--student-id` now says **use the id the instructor assigned you** — the old
+  text invited a nickname (`alice`), which would have pointed at empty state.
+- New "How you actually change things" section: each lab is its own CodeCommit
+  repo, and **pushing is what runs the lab**.
+- Tear-down no longer tells students to `terraform destroy` (it orphans the SAM
+  stack, log groups and Lab 4 blue/green leftovers, and races the central
+  teardown). They terminate their own EC2; Lab 5 stays student-owned.
+- Troubleshooting rows for empty output, "Terraform wants to destroy", kubectl
+  auth, missing credential helper, red lab3/4 pipelines, stopped Aurora.
+
+### Handouts
+
+`instructor/cohort/make_handouts.sh` generates a one-page handout per student
+from their `outputs-<id>.json`: pre-filled Step 5a command (no placeholders to
+get wrong), cluster, kubeconfig line, all four repo URLs + pipelines, ECR, Aurora
+endpoint. Written to `$IO107_OPS_DIR/handouts/`, **outside the checkout** —
+verified git reports them as "outside repository" — because they carry the
+account id. Generated for all 8 students.
