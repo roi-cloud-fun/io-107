@@ -987,3 +987,75 @@ nothing until `./power.sh start`.
 
 **Before the next session:** `./power.sh start` roughly 15 minutes ahead —
 Aurora is the slow one.
+
+---
+
+## 17. EKS worker nodes scaled to zero — and two bugs caught doing it (05:15)
+
+### Scaling in without breaking the node group: yes, easily
+
+Do **not** stop node instances directly — the node group treats a stopped node
+as unhealthy and replaces it, so you pay for the replacement. Scale the managed
+node group to `desiredSize=0` (and `minSize=0`, which the API accepts) instead.
+
+Tested on user50 first, then applied to all 8. Node groups stay **ACTIVE** at
+zero. `power.sh` gained a `nodes` scope plus an optional name filter
+(`./power.sh start nodes user50`), and saves each group's original sizes to
+`nodegroup-scale.json` so `start` restores exactly what was there.
+
+**Restore verified end to end** on user50: scaled back to 1/2/4, both nodes
+rejoined, and the lab1 Classic LoadBalancer **re-registered them automatically**
+(`InService`) with no manual step — the EKS cloud-controller-manager handles it.
+Then re-zeroed.
+
+Terraform pins `min_size = 1`, so a zero-scaled group is drift. Harmless: nothing
+re-applies that module during a course, and the next apply just restores nodes.
+
+### Bug 1 — the MSYS path trap, again (third time this project)
+
+`power.sh` exports `MSYS_NO_PATHCONV=1` (needed so ARNs and log-group names
+survive being passed to `aws.exe`). But `jq` is a **Windows** binary and cannot
+open an MSYS `/c/Users/...` path. The restore lookup therefore failed silently
+and fell back to DEFAULT node counts — the fallback masked the failure
+completely, because the defaults happened to be right.
+
+Fixed with an explicit `cygpath -m` for every `jq` file argument, plus a loud
+NOTE when a node group is missing from the file. Same family as
+[the teardown python bug] in §10 and the tfvars gotcha in §5c: **any MSYS path
+handed to a Windows-native binary needs converting.**
+
+### Bug 2 — a filtered `stop` clobbered the saved sizes
+
+`./power.sh stop nodes user50` only iterates that student's node group, and the
+save wrote the file wholesale — deleting the other 7 students' saved sizes.
+Caught by checking the file straight after; it had gone from 8 entries to 1.
+
+No operational harm (the 7 would have fallen back to the correct 1/2), but it
+would silently lose real data if sizes ever differed. Now **merges** via
+`jq -s '.[0] * .[1]'` and refuses to write if the merge fails, rather than
+replacing. Unit-tested: merging a 1-entry filtered run into an 8-entry file
+keeps 8 entries, updates the filtered one, preserves the rest.
+
+### Cost picture corrected
+
+An earlier figure in this session undercounted worker nodes (16, not 8) and
+missed the load balancers entirely. Actual, with workstations and Aurora already
+stopped:
+
+| Item | Count | ~$/hr |
+|---|---|---|
+| EKS control planes | 8 | 0.80 |
+| Worker nodes t3.medium | 16 | 0.67 |
+| lab1 Classic LBs | 8 | 0.20 |
+| **Total before scaling nodes in** | | **~1.67 (~$40/day)** |
+
+With node groups at zero: **~$1.00/hr (~$24/day)**, all of it control planes and
+load balancers, neither of which can be parked without destroying state.
+
+### Current state — maximally parked
+
+8 workstations `stopped` · 8 Aurora `stopped` · 8 node groups `0/0/4` ACTIVE ·
+8 control planes + 8 CLBs still billing (unavoidable short of teardown).
+
+**Class morning:** `./power.sh start` ~15 min ahead, then `./power.sh status`
+until node groups show `live=2`.

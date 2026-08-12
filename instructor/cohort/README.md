@@ -38,15 +38,46 @@ plan files and logs must never land in git.
 ## Turning the cohort off between sessions
 
 ```bash
-./power.sh status        # what is running where
-./power.sh stop          # end of a session
-./power.sh start         # ~15 min before the next (Aurora is slow to wake)
+./power.sh status                  # what is running where
+./power.sh stop                    # end of a session
+./power.sh start                   # ~15 min before the next
+./power.sh start nodes user04      # just one student, one resource class
 ```
 
-Stopping saves **compute only** — EBS volumes, Aurora storage and backups keep
-billing, and EKS control planes ($0.10/hr each) cannot be stopped at all. Also
-note **AWS auto-starts a stopped Aurora cluster after 7 days**; for a longer gap
-use `teardown_complete.sh` instead.
+Covers **workstations**, **Aurora**, and **EKS worker nodes**. Scopes:
+`all` (default), `workstations`, `aurora`, `nodes`. An optional third argument
+filters by name.
+
+### Worker nodes: scale, don't stop
+
+Stopping a node instance directly does not save money — the node group sees an
+unhealthy node and replaces it. The supported way is scaling the managed node
+group to `desiredSize=0`, which `power.sh stop nodes` does. The node group stays
+**ACTIVE** at zero.
+
+Original sizes are saved to `nodegroup-scale.json` in the ops directory so
+`start` restores exactly what was there; without that file it falls back to
+`IO107_NODE_MIN`/`IO107_NODE_DESIRED` (1/2).
+
+Verified end to end on a live cluster: scaling back up brought both nodes back
+and **the lab1 Classic LoadBalancer re-registered them automatically**
+(`InService`) with no manual step. Pods reschedule on their own in ~2–3 min.
+
+> Terraform pins `min_size = 1` for the node group, so a zero-scaled group is
+> drift. That is harmless — nothing re-applies that module during a course, and
+> the next `terraform apply` simply restores nodes, which is what you want
+> anyway. Do not "fix" the drift by applying mid-course.
+
+### What still costs money after `stop`
+
+| Item | Why it stays |
+|---|---|
+| 8 EKS control planes (~$0.80/hr) | cannot be stopped; destroying means a ~15 min rebuild and new names in every handout |
+| 8 lab1 Classic LoadBalancers (~$0.20/hr) | created by the lab1 helm release; only `helm uninstall myapp` removes them, which discards lab1's deployed state |
+| EBS volumes, Aurora storage + backups | stopping saves compute only |
+
+**AWS auto-starts a stopped Aurora cluster after 7 days.** For a longer gap, use
+`teardown_complete.sh` rather than leaving things parked.
 
 ```bash
 ./deploy_cohort_parallel.sh                       # everyone
