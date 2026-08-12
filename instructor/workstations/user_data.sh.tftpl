@@ -1,0 +1,48 @@
+#!/bin/bash
+# IO-107 student workstation bootstrap. Runs once at first boot as root.
+# Log: /var/log/cloud-init-output.log  and  /var/log/io107-setup.log
+set -x
+exec > >(tee -a /var/log/io107-setup.log) 2>&1
+
+echo "=== IO-107 workstation setup for ${student_id} — $(date -u) ==="
+
+# The lab toolchain (AWS CLI v2, Terraform, kubectl, Helm, Conftest, SAM).
+# Pinned versions live in the script, so the box always matches the buildspecs.
+curl -sSL "https://raw.githubusercontent.com/roi-cloud-fun/io-107/main/scripts/install_student_deps.sh" | bash
+
+# Pre-clone the course repo so students do not spend class time on Step 4.
+if [ ! -d /home/ec2-user/io-107 ]; then
+  git clone --depth=1 "${repo_url}" /home/ec2-user/io-107
+fi
+
+# CodeCommit auth via the instance's IAM identity — no keys, no prompts. This
+# is Step 5d of STUDENT_SETUP.md, done ahead of time.
+sudo -u ec2-user git config --global credential.helper '!aws codecommit credential-helper $@'
+sudo -u ec2-user git config --global credential.UseHttpPath true
+
+# Greet the student with their own id and the two facts that cause the most
+# damage if forgotten.
+cat > /etc/motd <<MOTD
+
+  IO-107 workstation — student: ${student_id}
+
+  Your lab environment is ALREADY DEPLOYED. Connect to it; do not create it.
+    cd ~/io-107 && ./instructor/bootstrap.sh --student-id ${student_id} --region $(
+      curl -s --max-time 5 -H "X-aws-ec2-metadata-token: $(curl -s --max-time 5 -X PUT \
+        "http://169.254.169.254/latest/api/token" \
+        -H "X-aws-ec2-metadata-token-ttl-seconds: 60")" \
+        http://169.254.169.254/latest/meta-data/placement/region)
+    cd ~/io-107/lab_environment/lab_env_student && terraform init && terraform output
+
+  *** NEVER run 'terraform apply' or 'terraform destroy' in lab_env_student ***
+      It deletes your environment (measured: 31 resources).
+
+  The course repo is already cloned in ~/io-107 and git is configured for
+  CodeCommit. Full instructions: ~/io-107/STUDENT_SETUP.md
+
+MOTD
+
+chown -R ec2-user:ec2-user /home/ec2-user/io-107 2>/dev/null || true
+
+echo "=== IO-107 workstation setup COMPLETE for ${student_id} — $(date -u) ==="
+touch /var/lib/io107-setup-complete

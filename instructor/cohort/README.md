@@ -32,6 +32,21 @@ plan files and logs must never land in git.
 | `remediate_labs34.sh` | apply the fixes students are meant to make, so labs 3/4 can be rehearsed end-to-end |
 | `teardown_complete.sh` | 6-phase teardown — **`terraform destroy` alone is not sufficient** |
 | `make_handouts.sh` | one-page handout per student from their `outputs-<id>.json`; written to `$IO107_OPS_DIR/handouts/`, outside the checkout (they contain the account id — do not commit) |
+| `deploy_workstations.sh` | build/destroy the student management EC2 boxes (wraps `instructor/workstations/`, applied once per region) |
+| `power.sh` | `status` / `stop` / `start` the cohort's stoppable compute — workstations and Aurora |
+
+## Turning the cohort off between sessions
+
+```bash
+./power.sh status        # what is running where
+./power.sh stop          # end of a session
+./power.sh start         # ~15 min before the next (Aurora is slow to wake)
+```
+
+Stopping saves **compute only** — EBS volumes, Aurora storage and backups keep
+billing, and EKS control planes ($0.10/hr each) cannot be stopped at all. Also
+note **AWS auto-starts a stopped Aurora cluster after 7 days**; for a longer gap
+use `teardown_complete.sh` instead.
 
 ```bash
 ./deploy_cohort_parallel.sh                       # everyone
