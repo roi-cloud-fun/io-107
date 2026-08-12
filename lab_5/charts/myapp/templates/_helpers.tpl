@@ -30,5 +30,5 @@ env inline in each Deployment; this helper carries only the common vars.
 - name: DB_NAME
   value: {{ .Values.db.name | quote }}
 - name: AWS_REGION
-  value: {{ .Values.region | quote }}
+  value: {{ required "region must be set -- the Lab 5 README installs with `--set region=\"$LAB5_REGION\"`" .Values.region | quote }}
 {{- end -}}

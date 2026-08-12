@@ -12,7 +12,9 @@ terraform {
   backend "s3" {
     bucket       = "io107-REPLACE-WITH-YOUR-STUDENT-ID-tfstate-REPLACE-WITH-ACCOUNT"
     key          = "lab_5/REPLACE-WITH-YOUR-STUDENT-ID.tfstate"
-    region       = "us-east-1"
+    # Your state bucket's region -- the same region your lab_env_student deploy
+    # is in. The cohort is split across regions; do not assume us-east-1.
+    region       = "REPLACE-WITH-YOUR-REGION"
     encrypt      = true
     use_lockfile = true
   }

@@ -34,8 +34,12 @@ db:
   # Database name created on the cluster.
   name: "appdb"
 
-# AWS region the app's boto3 clients target.
-region: "us-east-1"
+# AWS region the app's boto3 clients target. Injected by the README's install
+# step (`--set region="$LAB5_REGION"`, where LAB5_REGION comes from the
+# lab5_region terraform output). Left empty so a missing override fails loudly
+# at `helm template` time rather than silently pointing boto3 at us-east-1 for
+# a student working in another region.
+region: ""
 
 # IRSA service account. Helm creates it; the role ARN comes from
 # lab_5/terraform output lab5_myapp_role_arn.

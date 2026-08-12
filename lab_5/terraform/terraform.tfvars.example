@@ -4,12 +4,16 @@
 # student_id and aws_region must match your main lab_env_student deploy.
 # main_remote_state points at THAT deploy's S3 state so Lab 5 can read its
 # outputs (cluster name, VPC, subnets, worker SG, OIDC) read-only.
+#
+# NOTE: the cohort is split across regions -- check which one YOUR environment
+# is in (`kubeconfig_command` in your lab_env_student outputs shows it) rather
+# than assuming us-east-1. Both region fields below must be that same region.
 
 student_id = "REPLACE-WITH-YOUR-STUDENT-ID"
-aws_region = "us-east-1"
+aws_region = "REPLACE-WITH-YOUR-REGION"
 
 main_remote_state = {
   bucket = "io107-REPLACE-WITH-YOUR-STUDENT-ID-tfstate-REPLACE-WITH-ACCOUNT"
   key    = "lab_env_student/REPLACE-WITH-YOUR-STUDENT-ID.tfstate"
-  region = "us-east-1"
+  region = "REPLACE-WITH-YOUR-REGION"
 }

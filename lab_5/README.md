@@ -68,6 +68,12 @@ main_remote_state = {
 }
 ```
 
+> ⚠️ **Use your own region, not the `us-east-1` in this example.** The cohort is
+> split across regions; run `terraform output kubeconfig_command` in your
+> `lab_env_student` directory to see which one you are in. `aws_region` and
+> `main_remote_state.region` must both match it, or Terraform will read your
+> real state while pointing the provider at the wrong region.
+
 Edit **`backend.tf`** — set the **same bucket** and a **unique** key
 (`lab_5/<your-id>.tfstate`, *not* your lab_env_student key).
 
