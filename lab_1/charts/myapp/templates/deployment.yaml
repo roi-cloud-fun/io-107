@@ -29,7 +29,7 @@ spec:
             - name: ENVIRONMENT
               value: {{ .Values.environment | quote }}
             - name: AWS_REGION
-              value: "us-east-1"
+              value: {{ .Values.awsRegion | default "us-east-1" | quote }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:

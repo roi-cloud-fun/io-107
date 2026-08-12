@@ -30,7 +30,11 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-east-1"
+  # Region deliberately NOT set: the provider picks up AWS_REGION /
+  # AWS_DEFAULT_REGION, which CodeBuild sets to this project's own region.
+  # Hardcoding it was silently dangerous here -- plan and the policy gate both
+  # pass, so nothing looks wrong, but Deploy then creates the student's
+  # resources in us-east-1 no matter which region they are working in.
 }
 
 # Per-student suffix for plumbing resource names. The training account is

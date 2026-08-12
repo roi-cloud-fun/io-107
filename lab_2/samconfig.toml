@@ -16,7 +16,11 @@ lint = true
 
 [default.deploy.parameters]
 stack_name = "io107-lab2-sam-app"
-region = "us-east-1"
+# region deliberately NOT set: SAM falls back to AWS_REGION / AWS_DEFAULT_REGION
+# (CodeBuild sets both to the project's own region) or the student's CLI
+# profile. Hardcoding it deployed the stack into us-east-1 for us-east-2
+# students, whose Lambda then could not read its code from an artifact bucket
+# in another region -> CREATE_FAILED / ROLLBACK_COMPLETE.
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = false
 fail_on_empty_changeset = false

@@ -55,3 +55,8 @@ readinessProbe:
 
 # Overridden per-env (values-dev.yaml, values-stg.yaml).
 environment: base
+
+# Region the app talks to. The pipeline injects the region it is actually
+# running in via `--set awsRegion=$AWS_DEFAULT_REGION`; the "us-east-1" default
+# only applies to a manual `helm install` that does not override it.
+awsRegion: ""

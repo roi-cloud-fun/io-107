@@ -65,6 +65,7 @@ phases:
           --values charts/myapp/values-$ENVIRONMENT.yaml \
           --set image.repository=$ECR_REGISTRY/$ECR_REPO \
           --set image.tag=$IMAGE_TAG \
+          --set awsRegion=$AWS_DEFAULT_REGION \
           --set "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$IRSA_ROLE_ARN" \
           --atomic \
           --timeout 10m

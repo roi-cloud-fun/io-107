@@ -33,7 +33,10 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-east-1"
+  # Region deliberately NOT set: the provider picks up AWS_REGION /
+  # AWS_DEFAULT_REGION, which CodeBuild sets to this project's own region.
+  # Hardcoding it made data.aws_rds_cluster look in us-east-1 and fail with
+  # "couldn't find resource" for every us-east-2 student.
 
   default_tags {
     tags = {
