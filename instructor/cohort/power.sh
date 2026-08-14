@@ -189,7 +189,9 @@ do_workstations(){ # $1 = stop|start
   for R in $REGIONS; do
     if [ "$1" = stop ]; then IDS=$(ws_ids "$R" running,pending); else IDS=$(ws_ids "$R" stopped); fi
     if [ -z "$IDS" ]; then echo "  $R: no workstations to $1"; continue; fi
-    echo "  $R: ${1}ping $(echo "$IDS" | wc -w) workstation(s)"
+    # "stopping"/"starting", not the naive "${1}ping" which yields "startping".
+    [ "$1" = stop ] && ING=stopping || ING=starting
+    echo "  $R: $ING $(echo "$IDS" | wc -w) workstation(s)"
     # shellcheck disable=SC2086
     aws ec2 "${1}-instances" --region "$R" --instance-ids $IDS \
       --query "StoppingInstances[].InstanceId || StartingInstances[].InstanceId" --output text 2>&1 | sed 's/^/     /'
@@ -201,8 +203,9 @@ do_aurora(){ # $1 = stop|start
     if [ "$1" = stop ]; then WANT=available; else WANT=stopped; fi
     IDS=$(aurora_ids "$R" "$WANT")
     if [ -z "$IDS" ]; then echo "  $R: no Aurora clusters to $1"; continue; fi
+    [ "$1" = stop ] && ING=stopping || ING=starting
     for C in $IDS; do
-      printf "  %s: %sping %-42s " "$R" "$1" "$C"
+      printf "  %s: %s %-42s " "$R" "$ING" "$C"
       aws rds "${1}-db-cluster" --region "$R" --db-cluster-identifier "$C" \
         --query 'DBCluster.Status' --output text 2>&1
     done
