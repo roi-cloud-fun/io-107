@@ -579,6 +579,47 @@ resource "aws_eks_node_group" "training" {
   tags       = local.common_tags
 }
 
+# ---------------------------------------------------------------------------
+# Worker node tags.
+#
+# The `tags` above are applied to the NODE GROUP resource only -- EKS does not
+# propagate them to the Auto Scaling Group or to the EC2 instances. Left alone,
+# every worker node shows a blank Name in the console and nothing identifies
+# whose cluster it belongs to, which matters in a shared training account where
+# 8 students' nodes sit side by side.
+#
+# Tagging the ASG with propagate_at_launch is the fix that survives scaling:
+# nodes created by a scale-up, or replaced after a failure, are born with these
+# tags. (Tagging instances directly does not survive -- see
+# instructor/cohort/tag_nodes.sh, which does both for an already-running
+# cohort.)
+#
+# aws_autoscaling_group_tag is used rather than a launch template because the
+# ASG is created and owned by EKS: this adds tags to it in place, whereas
+# switching the node group to a custom launch template would force the node
+# group to be replaced.
+# ---------------------------------------------------------------------------
+locals {
+  node_asg_tags = {
+    Name    = "${local.name_prefix}-eks-node"
+    Student = var.student_id
+    Cluster = aws_eks_cluster.training.name
+    Purpose = "io107-eks-worker"
+  }
+}
+
+resource "aws_autoscaling_group_tag" "nodes" {
+  for_each = local.node_asg_tags
+
+  autoscaling_group_name = aws_eks_node_group.training.resources[0].autoscaling_groups[0].name
+
+  tag {
+    key                 = each.key
+    value               = each.value
+    propagate_at_launch = true
+  }
+}
+
 # IRSA OIDC provider
 data "tls_certificate" "eks_oidc" {
   url = aws_eks_cluster.training.identity[0].oidc[0].issuer

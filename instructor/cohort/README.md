@@ -33,7 +33,8 @@ plan files and logs must never land in git.
 | `teardown_complete.sh` | 6-phase teardown — **`terraform destroy` alone is not sufficient** |
 | `make_handouts.sh` | one-page handout per student from their `outputs-<id>.json`; written to `$IO107_OPS_DIR/handouts/`, outside the checkout (they contain the account id — do not commit) |
 | `deploy_workstations.sh` | build/destroy the student management EC2 boxes (wraps `instructor/workstations/`, applied once per region) |
-| `power.sh` | `status` / `stop` / `start` the cohort's stoppable compute — workstations and Aurora |
+| `power.sh` | `status` / `stop` / `start` the cohort's stoppable compute — workstations, Aurora and EKS nodes |
+| `tag_nodes.sh` | give EKS worker nodes a per-student `Name`/`Student`/`Cluster` tag (EKS does not propagate node-group tags to instances) |
 
 ## Turning the cohort off between sessions
 
@@ -119,4 +120,15 @@ Full detail in `DEPLOY_LOG.md`; the short version:
   `--student-id` / `--region` values are never guessed.
 - **Nothing creates student EC2 instances.** Students launch their own per
   `STUDENT_SETUP.md` Step 1, using the `Terraform-InstanceRole` instance
-  profile. Confirm that profile exists in the account before class.
+  profile. Confirm that profile exists in the account before class. (Or deploy
+  `instructor/workstations/` and skip Steps 1–4 entirely.)
+- **EKS does not propagate node-group tags to EC2 instances.** The node group's
+  Terraform `tags` land on the node group only, so worker nodes show a blank
+  `Name` and nothing says whose they are — awkward in a shared account. The
+  module now tags the ASG with `propagate_at_launch` (`aws_autoscaling_group_tag`);
+  for a cohort that is already running, `tag_nodes.sh` does both the ASG and the
+  live instances without restarting anything.
+- **Applying `lab_env_student` after a student finishes Lab 4 is not a no-op.**
+  The blue/green flow leaves a `synchronous_commit` parameter on the Aurora
+  parameter group that is not in the config, so a plan shows it being removed.
+  Harmless after the lab, but do not apply mid-class expecting nothing to change.
