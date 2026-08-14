@@ -72,7 +72,8 @@ for S in "${STUDENTS[@]}"; do
       # stale immediately. The instance id is stable for the life of the box,
       # and EC2 Instance Connect from the Console does not need an IP anyway.
       if [ -n "$WSID" ]; then
-        echo "| **Your workstation** | \`$WSID\` |"
+        echo "| **Your workstation** | \`io107-$S-workstation\` |"
+        echo "| (instance id) | \`$WSID\` |"
         echo
         echo "## Step 1–4 are already done for you"
         echo
@@ -80,12 +81,17 @@ for S in "${STUDENTS[@]}"; do
         echo "repo is cloned to \`~/io-107\` with git already set up for CodeCommit."
         echo "**Skip Steps 1–4 of \`STUDENT_SETUP.md\` and start at Step 5.**"
         echo
-        echo "Connect from the AWS Console — no key pair needed:"
+        echo "### Finding and connecting to it — no key pair needed"
         echo
-        echo "> **EC2 → Instances → \`$WSID\` → Connect → EC2 Instance Connect**, user \`ec2-user\`"
+        echo "1. AWS Console → **EC2 → Instances**, region **$REGION** (top-right)"
+        echo "2. Type \`$S\` in the search box — your box is **\`io107-$S-workstation\`**"
+        echo "3. Select it → **Connect** → **EC2 Instance Connect** → Connect"
+        echo "4. You land as user \`ec2-user\`. Run \`cd ~/io-107\` and start at Step 5."
         echo
-        echo "If the instance is stopped, ask the instructor to start it (they are parked"
-        echo "between sessions to save cost)."
+        echo "Only the student workstations are named, so anything with a blank Name is"
+        echo "an EKS worker node — not yours, leave it alone. If your instance shows"
+        echo "\`stopped\`, ask the instructor to start it (they are parked between"
+        echo "sessions to save cost)."
       fi
     fi
     echo
